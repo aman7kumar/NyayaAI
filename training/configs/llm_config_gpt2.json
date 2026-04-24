@@ -1,0 +1,15 @@
+{
+  "base_model":    "gpt2",
+  "train_file":    "backend/data/llm_finetune.jsonl",
+  "output_dir":    "backend/models/saved/legal_llm",
+  "max_length":    512,
+  "batch_size":    4,
+  "grad_accum":    4,
+  "epochs":        3,
+  "learning_rate": 5e-5,
+  "warmup_ratio":  0.05,
+  "use_lora":      false,
+  "save_steps":    200,
+  "logging_steps": 50,
+  "seed":          42
+}

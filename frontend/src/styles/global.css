@@ -1,0 +1,352 @@
+/* ============================================================
+   global.css — Legal AI India Design System
+   Aesthetic: Refined Indian legal/judicial — deep navy, gold,
+   parchment. Inspired by High Court architecture.
+   ============================================================ */
+
+@import url("https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600;700&family=DM+Sans:wght@300;400;500;600&display=swap");
+
+/* ── CSS Variables ──────────────────────────────────────────── */
+:root {
+  /* Colors */
+  --navy:          #0d1b2a;
+  --navy-mid:      #1a2e44;
+  --navy-light:    #1f3a54;
+  --gold:          #c9a84c;
+  --gold-light:    #e8c97a;
+  --gold-dim:      rgba(201, 168, 76, 0.15);
+  --crimson:       #c0392b;
+  --crimson-light: #e74c3c;
+  --emerald:       #1a7a4a;
+  --emerald-light: #27ae60;
+
+  /* Surfaces */
+  --bg:            #f5f0e8;       /* parchment */
+  --surface:       #fdfaf3;
+  --surface-2:     #f0ebe0;
+  --border:        #d4c9a8;
+  --border-dark:   #b8a97a;
+
+  /* Text */
+  --text-primary:  #1a1206;
+  --text-secondary:#4a3f2e;
+  --text-muted:    #7a6e5a;
+  --text-inverse:  #fdfaf3;
+
+  /* Fonts */
+  --font-display:  "Playfair Display", Georgia, serif;
+  --font-body:     "DM Sans", system-ui, sans-serif;
+
+  /* Spacing */
+  --radius-sm:     4px;
+  --radius-md:     8px;
+  --radius-lg:     16px;
+  --radius-xl:     24px;
+
+  /* Shadows */
+  --shadow-sm:     0 1px 3px rgba(13, 27, 42, 0.08);
+  --shadow-md:     0 4px 16px rgba(13, 27, 42, 0.12);
+  --shadow-lg:     0 8px 32px rgba(13, 27, 42, 0.18);
+  --shadow-gold:   0 4px 20px rgba(201, 168, 76, 0.25);
+
+  /* Transitions */
+  --t-fast:        150ms ease;
+  --t-mid:         280ms ease;
+  --t-slow:        500ms ease;
+}
+
+/* ── Reset & Base ───────────────────────────────────────────── */
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html {
+  font-size: 16px;
+  scroll-behavior: smooth;
+  -webkit-font-smoothing: antialiased;
+}
+
+body {
+  font-family: var(--font-body);
+  background-color: var(--bg);
+  color: var(--text-primary);
+  min-height: 100vh;
+  line-height: 1.6;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  font-family: var(--font-display);
+  line-height: 1.25;
+  color: var(--navy);
+}
+
+a {
+  color: var(--gold);
+  text-decoration: none;
+  transition: color var(--t-fast);
+}
+
+a:hover { color: var(--gold-light); }
+
+/* ── Layout ─────────────────────────────────────────────────── */
+.app-root {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+}
+
+.app-main {
+  flex: 1;
+  padding-top: 72px; /* navbar height */
+}
+
+.container {
+  max-width: 1160px;
+  margin: 0 auto;
+  padding: 0 24px;
+}
+
+.section {
+  padding: 64px 0;
+}
+
+/* ── Cards ──────────────────────────────────────────────────── */
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 28px;
+  box-shadow: var(--shadow-sm);
+  transition: box-shadow var(--t-mid), transform var(--t-mid);
+}
+
+.card:hover {
+  box-shadow: var(--shadow-md);
+}
+
+.card--gold {
+  border-color: var(--border-dark);
+  background: linear-gradient(135deg, var(--surface) 0%, #fef9ec 100%);
+}
+
+/* ── Buttons ────────────────────────────────────────────────── */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 24px;
+  border: none;
+  border-radius: var(--radius-md);
+  font-family: var(--font-body);
+  font-size: 0.95rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all var(--t-fast);
+  text-decoration: none;
+  line-height: 1;
+}
+
+.btn--primary {
+  background: var(--navy);
+  color: var(--text-inverse);
+  border: 2px solid var(--navy);
+}
+
+.btn--primary:hover {
+  background: var(--navy-mid);
+  border-color: var(--navy-mid);
+  color: var(--text-inverse);
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-md);
+}
+
+.btn--gold {
+  background: var(--gold);
+  color: var(--navy);
+  border: 2px solid var(--gold);
+  font-weight: 600;
+}
+
+.btn--gold:hover {
+  background: var(--gold-light);
+  border-color: var(--gold-light);
+  color: var(--navy);
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-gold);
+}
+
+.btn--outline {
+  background: transparent;
+  color: var(--navy);
+  border: 2px solid var(--border-dark);
+}
+
+.btn--outline:hover {
+  border-color: var(--gold);
+  color: var(--navy);
+  background: var(--gold-dim);
+}
+
+.btn--lg {
+  padding: 16px 36px;
+  font-size: 1.05rem;
+}
+
+.btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+  transform: none;
+}
+
+/* ── Inputs ─────────────────────────────────────────────────── */
+.input, .textarea {
+  width: 100%;
+  background: var(--surface);
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 14px 16px;
+  font-family: var(--font-body);
+  font-size: 0.95rem;
+  color: var(--text-primary);
+  transition: border-color var(--t-fast), box-shadow var(--t-fast);
+  outline: none;
+}
+
+.input:focus, .textarea:focus {
+  border-color: var(--gold);
+  box-shadow: 0 0 0 3px var(--gold-dim);
+}
+
+.textarea {
+  resize: vertical;
+  min-height: 140px;
+  line-height: 1.6;
+}
+
+/* ── Badges ─────────────────────────────────────────────────── */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  border-radius: 100px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.badge--navy    { background: var(--navy);     color: var(--text-inverse); }
+.badge--gold    { background: var(--gold-dim); color: var(--text-secondary); border: 1px solid var(--border-dark); }
+.badge--red     { background: #fde8e8;         color: var(--crimson); border: 1px solid #f5c6c6; }
+.badge--green   { background: #e8f5ee;         color: var(--emerald); border: 1px solid #b8dfc8; }
+.badge--blue    { background: #e8f0f8;         color: #1a4a7a; border: 1px solid #b8cde0; }
+
+/* ── Dividers ───────────────────────────────────────────────── */
+.divider {
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--border-dark), transparent);
+  margin: 32px 0;
+}
+
+.divider--gold {
+  background: linear-gradient(90deg, transparent, var(--gold), transparent);
+  height: 2px;
+}
+
+/* ── Ornamental motif (Indian judicial) ─────────────────────── */
+.ornament {
+  text-align: center;
+  color: var(--gold);
+  font-size: 1.5rem;
+  letter-spacing: 0.5rem;
+  user-select: none;
+  opacity: 0.6;
+}
+
+/* ── Section headings ───────────────────────────────────────── */
+.section-title {
+  font-family: var(--font-display);
+  font-size: 2rem;
+  font-weight: 700;
+  color: var(--navy);
+  margin-bottom: 8px;
+}
+
+.section-subtitle {
+  font-size: 1.05rem;
+  color: var(--text-secondary);
+  margin-bottom: 40px;
+  max-width: 600px;
+}
+
+/* ── Confidence bar ─────────────────────────────────────────── */
+.confidence-bar {
+  height: 6px;
+  border-radius: 100px;
+  background: var(--surface-2);
+  overflow: hidden;
+  margin-top: 6px;
+}
+
+.confidence-fill {
+  height: 100%;
+  border-radius: 100px;
+  background: linear-gradient(90deg, var(--navy-light), var(--gold));
+  transition: width 0.6s ease;
+}
+
+/* ── Loading spinner ────────────────────────────────────────── */
+.spinner {
+  display: inline-block;
+  width: 20px;
+  height: 20px;
+  border: 2px solid var(--border);
+  border-top-color: var(--gold);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* ── Urgency badges ─────────────────────────────────────────── */
+.urgency--immediate {
+  background: #fde8e8;
+  color: var(--crimson);
+  border: 1px solid #f5c6c6;
+  padding: 6px 14px;
+  border-radius: 100px;
+  font-weight: 600;
+  font-size: 0.85rem;
+}
+
+.urgency--within_24h {
+  background: #fff3e0;
+  color: #b35900;
+  border: 1px solid #ffd49a;
+  padding: 6px 14px;
+  border-radius: 100px;
+  font-weight: 600;
+  font-size: 0.85rem;
+}
+
+.urgency--within_week {
+  background: #e8f5ee;
+  color: var(--emerald);
+  border: 1px solid #b8dfc8;
+  padding: 6px 14px;
+  border-radius: 100px;
+  font-weight: 600;
+  font-size: 0.85rem;
+}
+
+/* ── Responsive ─────────────────────────────────────────────── */
+@media (max-width: 768px) {
+  .section { padding: 40px 0; }
+  .section-title { font-size: 1.6rem; }
+  .container { padding: 0 16px; }
+  .card { padding: 20px; }
+}

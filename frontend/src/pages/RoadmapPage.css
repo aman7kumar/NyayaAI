@@ -1,0 +1,248 @@
+/* RoadmapPage.css */
+
+.roadmap-header {
+  text-align: center;
+  margin-bottom: 48px;
+}
+
+.alert-info {
+  display: inline-block;
+  background: #e8f0f8;
+  border: 1px solid #b8cde0;
+  border-radius: var(--radius-md);
+  padding: 10px 20px;
+  font-size: 0.88rem;
+  color: #1a4a7a;
+  margin-top: 16px;
+}
+
+/* Sections */
+.roadmap-section {
+  margin-bottom: 56px;
+}
+
+.roadmap-section__title {
+  font-family: var(--font-display);
+  font-size: 1.4rem;
+  color: var(--navy);
+  margin-bottom: 24px;
+  padding-bottom: 12px;
+  border-bottom: 2px solid var(--border);
+}
+
+/* Emergency contacts */
+.emergency-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 12px;
+}
+
+.emergency-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 20px 12px;
+  background: var(--surface);
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius-md);
+  text-decoration: none;
+  transition: all var(--t-fast);
+  border-top: 3px solid var(--accent, var(--gold));
+}
+
+.emergency-card:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-md);
+  border-color: var(--border-dark);
+}
+
+.emergency-card__icon {
+  font-size: 1.6rem;
+}
+
+.emergency-card__phone {
+  font-family: var(--font-display);
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: var(--navy);
+}
+
+.emergency-card__name {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  text-align: center;
+  line-height: 1.3;
+}
+
+/* Roadmap timeline */
+.roadmap-timeline {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.roadmap-item {
+  display: flex;
+  gap: 20px;
+}
+
+.roadmap-item__connector {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.roadmap-item__dot {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: var(--navy);
+  color: #fff;
+  font-family: var(--font-display);
+  font-size: 1.1rem;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 3px solid var(--gold);
+  flex-shrink: 0;
+  z-index: 1;
+}
+
+.roadmap-item__line {
+  flex: 1;
+  width: 2px;
+  background: linear-gradient(180deg, var(--gold), var(--border));
+  min-height: 24px;
+  margin: 4px 0;
+}
+
+.roadmap-item__content {
+  flex: 1;
+  margin-bottom: 24px;
+}
+
+.roadmap-item__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+  flex-wrap: wrap;
+}
+
+.roadmap-item__header h3 {
+  font-family: var(--font-display);
+  font-size: 1rem;
+  color: var(--navy);
+  flex: 1;
+}
+
+.roadmap-item__approach {
+  font-size: 0.88rem;
+  color: var(--text-secondary);
+  margin-bottom: 10px;
+}
+
+.roadmap-item__docs {
+  font-size: 0.84rem;
+  color: var(--text-secondary);
+  margin-bottom: 10px;
+}
+
+.roadmap-item__docs ul {
+  margin-top: 6px;
+  padding-left: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.roadmap-item__tip {
+  font-size: 0.84rem;
+  color: #7a5a00;
+  background: #fef9ec;
+  border: 1px solid var(--border-dark);
+  border-radius: var(--radius-sm);
+  padding: 10px 14px;
+  line-height: 1.6;
+}
+
+/* Know Your Rights */
+.rights-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 20px;
+}
+
+.right-card {
+  transition: transform var(--t-mid), box-shadow var(--t-mid);
+}
+
+.right-card:hover {
+  transform: translateY(-3px);
+  box-shadow: var(--shadow-md);
+}
+
+.right-card__icon {
+  font-size: 1.8rem;
+  margin-bottom: 12px;
+}
+
+.right-card__title {
+  font-family: var(--font-display);
+  font-size: 1rem;
+  color: var(--navy);
+  margin-bottom: 10px;
+}
+
+.right-card__detail {
+  font-size: 0.86rem;
+  color: var(--text-secondary);
+  line-height: 1.65;
+  margin-bottom: 12px;
+}
+
+.right-card__law {
+  margin-top: auto;
+}
+
+/* CTA */
+.roadmap-cta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  flex-wrap: wrap;
+  padding: 32px;
+}
+
+.roadmap-cta__text h3 {
+  font-family: var(--font-display);
+  font-size: 1.2rem;
+  color: var(--navy);
+  margin-bottom: 6px;
+}
+
+.roadmap-cta__text p {
+  font-size: 0.9rem;
+  color: var(--text-secondary);
+}
+
+/* Responsive */
+@media (max-width: 1100px) {
+  .emergency-grid { grid-template-columns: repeat(4, 1fr); }
+}
+
+@media (max-width: 900px) {
+  .emergency-grid { grid-template-columns: repeat(3, 1fr); }
+  .rights-grid    { grid-template-columns: 1fr 1fr; }
+}
+
+@media (max-width: 600px) {
+  .emergency-grid { grid-template-columns: repeat(2, 1fr); }
+  .rights-grid    { grid-template-columns: 1fr; }
+  .roadmap-cta    { flex-direction: column; align-items: flex-start; }
+}

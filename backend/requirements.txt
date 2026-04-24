@@ -1,0 +1,47 @@
+# ============================================================
+# AI-Powered Legal Analyzer — Backend Dependencies
+# ============================================================
+
+# Web Framework
+fastapi==0.111.0
+uvicorn[standard]==0.29.0
+python-multipart==0.0.9
+pydantic==2.7.1
+
+# ML / NLP Core
+torch==2.3.0
+transformers==4.41.1
+sentence-transformers==3.0.1
+datasets==2.19.1
+accelerate==0.30.0
+peft==0.11.1          # LoRA fine-tuning for LLMs
+bitsandbytes==0.43.1  # Quantization (4-bit / 8-bit)
+scikit-learn==1.5.0
+numpy==1.26.4
+
+# Vector Database
+faiss-cpu==1.8.0       # Use faiss-gpu if CUDA available
+
+# NLP Utilities
+spacy==3.7.4
+langdetect==1.0.9
+indic-transliteration==2.3.57   # Hindi/regional transliteration
+
+# PDF / OCR
+PyMuPDF==1.24.3        # PDF text extraction
+pytesseract==0.3.10    # OCR wrapper
+Pillow==10.3.0
+
+# Data Processing
+pandas==2.2.2
+jsonlines==4.0.0
+tqdm==4.66.4
+python-dotenv==1.0.1
+
+# Explainability
+shap==0.45.1
+lime==0.2.0.1
+
+# Testing
+pytest==8.2.0
+httpx==0.27.0

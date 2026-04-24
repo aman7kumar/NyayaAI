@@ -1,0 +1,246 @@
+/* AnalyzePage.css */
+
+.analyze-header {
+  text-align: center;
+  margin-bottom: 48px;
+}
+
+.analyze-layout {
+  display: grid;
+  grid-template-columns: 1fr 320px;
+  gap: 32px;
+  align-items: start;
+}
+
+/* Mode selector */
+.mode-selector {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 24px;
+  flex-wrap: wrap;
+}
+
+.mode-btn {
+  flex: 1;
+  min-width: 140px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  padding: 14px 16px;
+  background: var(--surface);
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: all var(--t-fast);
+  text-align: left;
+}
+
+.mode-btn:hover {
+  border-color: var(--border-dark);
+  background: var(--surface-2);
+}
+
+.mode-btn--active {
+  border-color: var(--gold);
+  background: var(--gold-dim);
+}
+
+.mode-btn__label {
+  font-size: 0.92rem;
+  font-weight: 600;
+  color: var(--navy);
+}
+
+.mode-btn__desc {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+/* Form elements */
+.form-group {
+  margin-bottom: 20px;
+}
+
+.form-row {
+  display: grid;
+  grid-template-columns: 1fr;
+}
+
+.form-label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  margin-bottom: 8px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.form-hint {
+  font-size: 0.78rem;
+  font-weight: 400;
+  color: var(--text-muted);
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+.char-count {
+  text-align: right;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  margin-top: 4px;
+}
+
+/* Dropzone */
+.dropzone {
+  border: 2px dashed var(--border-dark);
+  border-radius: var(--radius-lg);
+  padding: 40px;
+  text-align: center;
+  cursor: pointer;
+  background: var(--surface);
+  transition: all var(--t-fast);
+}
+
+.dropzone:hover,
+.dropzone--active {
+  border-color: var(--gold);
+  background: var(--gold-dim);
+}
+
+.dropzone--filled {
+  border-style: solid;
+  border-color: var(--gold);
+  background: var(--gold-dim);
+  padding: 24px;
+}
+
+.dropzone__placeholder p {
+  color: var(--text-secondary);
+  margin-top: 8px;
+  font-size: 0.92rem;
+}
+
+.dropzone__hint {
+  font-size: 0.78rem !important;
+  color: var(--text-muted) !important;
+  margin-top: 4px !important;
+}
+
+.dropzone__icon {
+  font-size: 2.5rem;
+  display: block;
+  margin-bottom: 8px;
+}
+
+.dropzone__file {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.dropzone__file-icon { font-size: 1.5rem; }
+
+.dropzone__file-name {
+  font-weight: 600;
+  color: var(--navy);
+  font-size: 0.9rem;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dropzone__file-size {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+}
+
+/* OCR preview */
+.ocr-preview {
+  margin-top: 16px;
+}
+
+.ocr-preview__label {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 8px;
+}
+
+/* Submit button */
+.analyze-submit {
+  width: 100%;
+  justify-content: center;
+  font-size: 1.05rem;
+  padding: 18px;
+  margin-top: 8px;
+}
+
+/* Sidebar */
+.sidebar-card {
+  margin-bottom: 16px;
+}
+
+.sidebar-card h3 {
+  font-family: var(--font-display);
+  font-size: 1rem;
+  color: var(--navy);
+  margin-bottom: 10px;
+}
+
+.sidebar-card p {
+  font-size: 0.88rem;
+  color: var(--text-secondary);
+  line-height: 1.6;
+}
+
+/* Contact list */
+.contact-list {
+  list-style: none;
+  margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.contact-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.contact-num {
+  font-weight: 700;
+  font-size: 0.9rem;
+  color: var(--navy);
+  min-width: 80px;
+}
+
+.contact-label {
+  font-size: 0.82rem;
+  color: var(--text-muted);
+}
+
+/* Responsive */
+@media (max-width: 900px) {
+  .analyze-layout {
+    grid-template-columns: 1fr;
+  }
+  .analyze-sidebar {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+  }
+  .sidebar-card { margin-bottom: 0; }
+}
+
+@media (max-width: 600px) {
+  .analyze-sidebar { grid-template-columns: 1fr; }
+  .mode-btn { min-width: 100%; }
+}

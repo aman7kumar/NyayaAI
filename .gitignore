@@ -1,0 +1,52 @@
+# Python
+__pycache__/
+*.pyc
+
+# Virtual env
+venv/
+.venv/
+
+# Node
+frontend/node_modules/
+
+# Data (IMPORTANT)
+backend/data/
+training/data/
+training/data_prep/
+
+# Models (CRITICAL)
+*.bin
+*.pt
+*.pth
+*.faiss
+*.pkl
+
+# Logs / outputs
+logs/
+outputs/
+checkpoints/
+
+# Env
+.env
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Saved models (VERY IMPORTANT)
+backend/models/saved/
+backend/models/faiss_index/
+
+# Training outputs
+training/checkpoints/
+training/output/
+
+# Data prep raw files
+training/data_prep/raw/
+
+# JSON (be careful — optional)
+backend/models/saved/*.json
