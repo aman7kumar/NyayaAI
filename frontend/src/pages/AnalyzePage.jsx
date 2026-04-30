@@ -51,12 +51,31 @@ export default function AnalyzePage() {
       const res = await axios.post(`${API_BASE}/ocr`, formData, {
         headers: { "Content-Type": "multipart/form-data" },
       });
-    const extractedText = res.data.raw_text || "";
+
+      // Handle response
+      const extractedText = res.data.raw_text || "";
+      const engine        = res.data.engine_used || "unknown";
+      const confidence    = res.data.confidence  || 0;
+      const wordCount     = res.data.word_count  || 0;
+
+      if (!extractedText || extractedText.trim().length === 0) {
+        toast.error(
+          "No text extracted. Try a clearer image with good lighting."
+        );
+        setOcrLoading(false);
+        return;
+      }
+
       setOcrText(extractedText);
       setQuery(extractedText);
-      toast.success(`OCR complete! Confidence: ${(res.data.confidence * 100).toFixed(0)}%`);
-    } catch {
-      toast.error("OCR failed. Please try a clearer image.");
+      toast.success(
+        `✅ OCR complete! Engine: ${engine} | ` +
+        `Confidence: ${(confidence * 100).toFixed(0)}% | ` +
+        `Words: ${wordCount}`
+      );
+    } catch (err) {
+      const msg = err.response?.data?.detail || "OCR failed. Try a clearer image.";
+      toast.error(msg);
     } finally {
       setOcrLoading(false);
     }

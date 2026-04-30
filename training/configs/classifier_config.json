@@ -1,14 +1,14 @@
 {
+  "base_model":    "law-ai/InLegalBERT",
   "train_file":    "backend/data/classifier_train.jsonl",
-  "val_split":     0.15,
   "output_dir":    "backend/models/saved/ipc_classifier",
-  "model_name":    "distilbert-base-multilingual-cased",
-  "max_len":       64,
-  "batch_size":    16,
-  "epochs":        5,
-  "learning_rate": 3e-05,
+  "max_len":       128,
+  "batch_size":    8,
+  "epochs":        8,
+  "learning_rate": 2e-05,
   "warmup_ratio":  0.1,
   "weight_decay":  0.01,
-  "threshold":     0.35,
-  "seed":          42
+  "threshold":     0.25,
+  "seed":          42,
+  "num_workers":   0
 }
