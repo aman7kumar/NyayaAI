@@ -1,6 +1,7 @@
 // frontend/src/pages/ResultsPage.jsx
 import React, { useEffect, useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
+import ReactMarkdown from "react-markdown";
 import "./ResultsPage.css";
 
 export default function ResultsPage() {
@@ -107,7 +108,11 @@ export default function ResultsPage() {
               <div className="card card--gold summary-card">
                 <h2 className="summary-card__title">⚖️ Legal Summary</h2>
                 <div className="divider--gold divider" style={{ margin: "16px 0" }} />
-                <p className="summary-text">{summary || "Analysis complete. View other tabs for detailed results."}</p>
+                <div className="summary-text markdown-body">
+                  <ReactMarkdown>
+                    {summary || "Analysis complete. View other tabs for detailed results."}
+                  </ReactMarkdown>
+                </div>
               </div>
               <div className="summary-quick-actions">
                 <button
@@ -172,7 +177,9 @@ export default function ResultsPage() {
             <div className="tab-panel">
               {explanation ? (
                 <div className="card explanation-card">
-                  <pre className="explanation-text">{explanation}</pre>
+                  <div className="explanation-text markdown-body">
+                    <ReactMarkdown>{explanation}</ReactMarkdown>
+                  </div>
                 </div>
               ) : (
                 <div className="empty-state">Explanation not generated for this analysis.</div>
