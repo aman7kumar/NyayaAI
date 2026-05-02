@@ -358,3 +358,21 @@
   .results-tab  { padding: 10px 12px; font-size: 0.8rem; }
   .entities-grid { grid-template-columns: 1fr; }
 }
+
+/* Accused roadmap warning boxes */
+.roadmap-step__warning {
+  font-size: 0.84rem;
+  color: #7a0000;
+  background: #fde8e8;
+  border: 1px solid #f5c6c6;
+  border-left: 3px solid var(--crimson);
+  border-radius: var(--radius-sm);
+  padding: 10px 14px;
+  margin-top: 8px;
+  line-height: 1.6;
+}
+
+/* Accused step highlight */
+.roadmap-step__body.accused-step {
+  border-left: 3px solid var(--crimson);
+}

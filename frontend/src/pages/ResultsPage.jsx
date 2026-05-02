@@ -53,10 +53,13 @@ export default function ResultsPage() {
         {/* ── Header ─────────────────────────────────────── */}
         <div className="results-header">
           <div className="results-header__meta">
-            <span className={`badge ${domain.color}`}>{domain.label} Matter</span>
-            <span className="badge badge--gold">
-              {detected_language === "hi" ? "🇮🇳 Hindi Detected" : "🇬🇧 English"}
-            </span>
+              <span className={`badge ${domain.color}`}>{domain.label} Matter</span>
+              {result.user_role === "accused" && (
+                  <span className="badge badge--red">⚠️ Accused Person — Defence Guidance</span>
+              )}
+              {result.user_role === "victim" && (
+                  <span className="badge badge--green">🙋 Victim — Action Guidance</span>
+              )}
           </div>
           <h1 className="results-title">Analysis Results</h1>
           {translated_query && (
@@ -218,6 +221,11 @@ export default function ResultsPage() {
                         {step.tips && (
                           <div className="roadmap-step__tips">
                             💡 {step.tips}
+                          </div>
+                        )}
+                        {step.warning && (
+                          <div className="roadmap-step__warning">
+                            ⚠️ <strong>Important:</strong> {step.warning}
                           </div>
                         )}
                       </div>

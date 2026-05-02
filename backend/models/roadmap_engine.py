@@ -1,33 +1,19 @@
 """
 backend/models/roadmap_engine.py
-==================================
-Generates a personalized, step-by-step legal action roadmap for citizens.
-
-Based on:
-  - Detected query type (criminal / civil / consumer / family / cyber)
-  - Predicted IPC/CrPC sections
-  - Extracted entities (location, time, parties)
-
-Roadmap includes:
-  - Immediate steps
-  - Whom to approach (Police / Magistrate / Consumer Forum / NHRC etc.)
-  - Timeline for each action
-  - Documents to carry
-  - Legal aid contacts
+Generates personalized legal roadmaps for BOTH victims AND accused persons.
 """
 
 from __future__ import annotations
-
+import copy
 import logging
 from typing import Any
 
 logger = logging.getLogger(__name__)
 
 
-# ── Roadmap Templates ──────────────────────────────────────────────────────────
-# Each query type has a base roadmap that is customized at runtime.
+# ── VICTIM Roadmap Templates (existing) ───────────────────────────────────────
 
-ROADMAP_TEMPLATES: dict[str, list[dict]] = {
+VICTIM_ROADMAPS: dict[str, list[dict]] = {
 
     "criminal": [
         {
@@ -37,6 +23,7 @@ ROADMAP_TEMPLATES: dict[str, list[dict]] = {
             "timeline": "Immediately",
             "documents_needed": [],
             "tips": "Call 112 immediately if you or someone is in danger. Police must respond.",
+            "type": "victim",
         },
         {
             "step_number": 2,
@@ -45,15 +32,12 @@ ROADMAP_TEMPLATES: dict[str, list[dict]] = {
             "timeline": "Within 24 hours of the incident",
             "documents_needed": [
                 "Your Aadhar Card / ID proof",
-                "Written complaint (can be verbal too — police must record it)",
+                "Written complaint (can be verbal — police must record it)",
                 "Any evidence: photos, screenshots, witness names",
                 "Medical report if injured",
             ],
-            "tips": (
-                "Police CANNOT refuse to register a cognizable offence FIR (CrPC 154). "
-                "If they refuse, write to the Superintendent of Police or file a complaint "
-                "before the Magistrate under CrPC 156(3)."
-            ),
+            "tips": "Police CANNOT refuse to register a cognizable offence FIR (CrPC 154). If they refuse, write to the SP or approach Magistrate under CrPC 156(3).",
+            "type": "victim",
         },
         {
             "step_number": 3,
@@ -67,10 +51,11 @@ ROADMAP_TEMPLATES: dict[str, list[dict]] = {
                 "Witness statements (names + contact numbers)",
             ],
             "tips": "CCTV footage is typically overwritten within 24-72 hours. Request preservation urgently.",
+            "type": "victim",
         },
         {
             "step_number": 4,
-            "action": "If police are not acting, escalate to the Superintendent of Police (SP) or SP's office.",
+            "action": "If police are not acting, escalate to the Superintendent of Police (SP).",
             "whom_to_approach": "Superintendent of Police (SP) / Senior Police Officers",
             "timeline": "If no action within 3-5 days of FIR",
             "documents_needed": [
@@ -78,6 +63,7 @@ ROADMAP_TEMPLATES: dict[str, list[dict]] = {
                 "Written complaint to SP",
             ],
             "tips": "You can also file an online complaint on your state police portal or the NCRB portal.",
+            "type": "victim",
         },
         {
             "step_number": 5,
@@ -89,89 +75,38 @@ ROADMAP_TEMPLATES: dict[str, list[dict]] = {
                 "Evidence collected",
                 "Legal representation (consult a lawyer)",
             ],
-            "tips": "Free legal aid is available under the Legal Services Authorities Act. Contact DLSA.",
-        },
-    ],
-
-    "civil": [
-        {
-            "step_number": 1,
-            "action": "Send a formal Legal Notice to the opposing party via a lawyer.",
-            "whom_to_approach": "Advocate / Lawyer — prepare and send via registered post",
-            "timeline": "Within 1 week of the dispute",
-            "documents_needed": [
-                "All agreements / contracts",
-                "Communication records (emails, messages)",
-                "Payment receipts or proof of loss",
-                "Your ID proof",
-            ],
-            "tips": "A legal notice often resolves disputes without going to court. Give 15-30 days for response.",
-        },
-        {
-            "step_number": 2,
-            "action": "Attempt mediation or Lok Adalat for faster, cost-free resolution.",
-            "whom_to_approach": "District Legal Services Authority (DLSA) — Lok Adalat",
-            "timeline": "After sending legal notice, within 30 days",
-            "documents_needed": [
-                "Copy of legal notice",
-                "All supporting documents",
-            ],
-            "tips": "Lok Adalat awards are final and binding. No court fees. Fast resolution — same day often.",
-        },
-        {
-            "step_number": 3,
-            "action": "File a civil suit in the appropriate court.",
-            "whom_to_approach": "Civil Court (Munsiff / Civil Judge) — based on claim amount",
-            "timeline": "If mediation fails, within limitation period (usually 3 years)",
-            "documents_needed": [
-                "Plaint (complaint document prepared by lawyer)",
-                "All evidence",
-                "Court fee (based on claim amount)",
-                "ID proof",
-            ],
-            "tips": "Claim up to ₹3 lakh → Munsiff Court. ₹3-20 lakh → Civil Judge. Above → District Court.",
+            "tips": "Free legal aid is available under Legal Services Authorities Act. Contact DLSA (call 15100).",
+            "type": "victim",
         },
     ],
 
     "consumer": [
         {
             "step_number": 1,
-            "action": "Send a complaint email/letter to the company's customer care and keep a record.",
+            "action": "Send a formal complaint email/letter to the company's Grievance Officer and keep records.",
             "whom_to_approach": "Company Customer Care / Grievance Officer",
             "timeline": "Immediately after the issue",
-            "documents_needed": [
-                "Purchase receipt / invoice",
-                "Product/service description",
-                "Communication records",
-            ],
-            "tips": "Keep all emails and chat transcripts. This creates an evidence trail.",
+            "documents_needed": ["Purchase receipt / invoice", "Product description", "Communication records"],
+            "tips": "Keep all emails and chat transcripts as evidence.",
+            "type": "victim",
         },
         {
             "step_number": 2,
             "action": "File a complaint on the National Consumer Helpline portal.",
             "whom_to_approach": "National Consumer Helpline — 1800-11-4000 or consumerhelpline.gov.in",
             "timeline": "Within 1 week of company non-response",
-            "documents_needed": [
-                "Invoice / receipt",
-                "Company complaint acknowledgment",
-            ],
+            "documents_needed": ["Invoice/receipt", "Company complaint acknowledgment"],
             "tips": "NCH mediates between consumer and company. Many cases resolved at this stage.",
+            "type": "victim",
         },
         {
             "step_number": 3,
             "action": "File a case before the Consumer Disputes Redressal Commission.",
-            "whom_to_approach": "District Consumer Forum (claim ≤ ₹50 lakh) / State Commission / National Commission",
+            "whom_to_approach": "District Consumer Forum (claim up to Rs 50 lakh)",
             "timeline": "Within 2 years of the cause of action",
-            "documents_needed": [
-                "Complaint form",
-                "All purchase documents",
-                "Evidence of deficiency in service",
-                "Demand for compensation (specify amount)",
-            ],
-            "tips": (
-                "Filing fee is minimal (₹50-₹200 for District Forum). "
-                "No lawyer required — you can represent yourself."
-            ),
+            "documents_needed": ["Complaint form", "All purchase documents", "Evidence of deficiency"],
+            "tips": "Filing fee is minimal. No lawyer required — you can represent yourself.",
+            "type": "victim",
         },
     ],
 
@@ -183,226 +118,439 @@ ROADMAP_TEMPLATES: dict[str, list[dict]] = {
             "timeline": "Immediately",
             "documents_needed": [],
             "tips": "Informal resolution is faster and less stressful. Attempt this first.",
+            "type": "victim",
         },
         {
             "step_number": 2,
-            "action": "Consult a family lawyer or legal aid authority.",
-            "whom_to_approach": "Family Lawyer / District Legal Services Authority (DLSA)",
+            "action": "Consult a family lawyer or the District Legal Services Authority.",
+            "whom_to_approach": "Family Lawyer / DLSA (call 15100)",
             "timeline": "Within 1-2 weeks",
-            "documents_needed": [
-                "Marriage certificate (for matrimonial disputes)",
-                "Birth certificates (for custody disputes)",
-                "Income documents (for maintenance claims)",
-                "All relevant agreements",
-            ],
+            "documents_needed": ["Marriage certificate", "Birth certificates", "Income documents"],
             "tips": "Free legal aid is available for women, children, and economically weaker sections.",
+            "type": "victim",
         },
         {
             "step_number": 3,
             "action": "File a petition in the Family Court.",
             "whom_to_approach": "Family Court (available in most districts)",
-            "timeline": "After consulting lawyer, within limitation period",
-            "documents_needed": [
-                "Petition (prepared by lawyer)",
-                "All supporting documents",
-                "ID proofs of all parties",
-            ],
-            "tips": "Family Courts are designed for faster resolution. Cases usually heard within 6-18 months.",
-        },
-    ],
-
-    "cyber": [
-        {
-            "step_number": 1,
-            "action": "Preserve all digital evidence immediately. Take screenshots.",
-            "whom_to_approach": "Self — preserve evidence before reporting",
-            "timeline": "Immediately",
-            "documents_needed": [
-                "Screenshots of offending content (with timestamps visible)",
-                "URLs / links",
-                "Email headers if relevant",
-            ],
-            "tips": "Do NOT delete any messages or block the person yet — this destroys evidence.",
-        },
-        {
-            "step_number": 2,
-            "action": "Report to the National Cyber Crime Reporting Portal.",
-            "whom_to_approach": "cybercrime.gov.in — or Cyber Crime Cell of your district",
-            "timeline": "Within 24 hours of discovering the crime",
-            "documents_needed": [
-                "All screenshots",
-                "Device used (phone/laptop)",
-                "Your email/account details",
-            ],
-            "tips": "For child-related cyber crimes, use the 'Report & Track' option on cybercrime.gov.in.",
-        },
-        {
-            "step_number": 3,
-            "action": "File FIR at local police station under IT Act / IPC sections.",
-            "whom_to_approach": "Local Police Station — Cyber Crime Cell",
-            "timeline": "Within 48-72 hours",
-            "documents_needed": [
-                "All digital evidence (screenshots, emails)",
-                "Your ID proof",
-                "Written complaint",
-            ],
-            "tips": "Relevant sections: IT Act 66, 66C, 66E, 67 and IPC 499, 503, 509.",
+            "timeline": "After consulting lawyer",
+            "documents_needed": ["Petition", "All supporting documents", "ID proofs"],
+            "tips": "Family Courts are designed for faster resolution.",
+            "type": "victim",
         },
     ],
 
     "dowry_harassment": [
         {
             "step_number": 1,
-            "action": "Leave the unsafe environment. Go to a safe place — parent's home or shelter.",
+            "action": "Leave the unsafe environment immediately. Go to a safe place.",
             "whom_to_approach": "Family / Women's Shelter — call 181 (Women's Helpline)",
             "timeline": "Immediately if in danger",
             "documents_needed": [],
-            "tips": "Dial 181 (Women Helpline) or 1091 (Police Women Helpline). These are 24/7 free services.",
+            "tips": "Dial 181 (Women Helpline) or 1091 (Police Women Helpline). Available 24/7.",
+            "type": "victim",
         },
         {
             "step_number": 2,
             "action": "File a complaint at the nearest police station under IPC 498A and Dowry Prohibition Act.",
             "whom_to_approach": "Local Police Station — Women's Cell",
             "timeline": "As soon as safe to do so",
-            "documents_needed": [
-                "Marriage certificate",
-                "Evidence of dowry demands (messages, witnesses)",
-                "Medical report if physically harmed",
-                "List of dowry items given",
-            ],
+            "documents_needed": ["Marriage certificate", "Evidence of dowry demands", "Medical report if harmed"],
             "tips": "Police must register FIR for IPC 498A. It is a cognizable and non-bailable offence.",
+            "type": "victim",
         },
         {
             "step_number": 3,
-            "action": "Apply for protection order under Protection of Women from Domestic Violence Act, 2005.",
+            "action": "Apply for protection order under Protection of Women from Domestic Violence Act 2005.",
             "whom_to_approach": "Magistrate Court / Protection Officer (appointed in each district)",
             "timeline": "Simultaneously with police complaint",
-            "documents_needed": [
-                "Application form (DIR — Domestic Incident Report)",
-                "Evidence of violence/harassment",
-            ],
+            "documents_needed": ["Application form (DIR)", "Evidence of violence/harassment"],
             "tips": "Protection Officer helps you file DIR for free. Magistrate can issue protection order same day.",
+            "type": "victim",
         },
     ],
 
-    "default": [
+    "cyber": [
         {
             "step_number": 1,
-            "action": "Document everything related to your legal issue with dates, times, and details.",
-            "whom_to_approach": "Self — create a written record",
+            "action": "Preserve all digital evidence immediately. Take screenshots of everything.",
+            "whom_to_approach": "Self — preserve evidence before reporting",
             "timeline": "Immediately",
-            "documents_needed": ["All relevant documents, receipts, messages, photos"],
-            "tips": "A clear written timeline of events is invaluable for any legal proceeding.",
+            "documents_needed": ["Screenshots with timestamps", "URLs/links", "Email headers if relevant"],
+            "tips": "Do NOT delete any messages or block the person yet — this destroys evidence.",
+            "type": "victim",
         },
         {
             "step_number": 2,
-            "action": "Consult a lawyer for a professional assessment of your situation.",
-            "whom_to_approach": "Lawyer / District Legal Services Authority (DLSA) for free legal aid",
-            "timeline": "Within 1 week",
-            "documents_needed": ["All documents related to the issue"],
-            "tips": "Free legal aid is available for women, SC/ST, persons with disabilities, and people below poverty line.",
+            "action": "Report to the National Cyber Crime Reporting Portal.",
+            "whom_to_approach": "cybercrime.gov.in or Cyber Crime Cell — call 1930",
+            "timeline": "Within 24 hours",
+            "documents_needed": ["All screenshots", "Device details", "Your account details"],
+            "tips": "For financial fraud, call 1930 immediately — banks can freeze fraudulent transactions.",
+            "type": "victim",
         },
         {
             "step_number": 3,
-            "action": "File a complaint with the appropriate authority based on your issue.",
-            "whom_to_approach": "Police / Court / Consumer Forum / Regulatory Authority",
-            "timeline": "As advised by lawyer",
-            "documents_needed": ["As per your lawyer's guidance"],
-            "tips": "Always keep copies of every document you submit anywhere.",
+            "action": "File FIR at local police station under IT Act / IPC sections.",
+            "whom_to_approach": "Local Police Station — Cyber Crime Cell",
+            "timeline": "Within 48-72 hours",
+            "documents_needed": ["All digital evidence", "Your ID proof", "Written complaint"],
+            "tips": "Relevant sections: IT Act 66, 66C, 66E, 67 and IPC 499, 503, 509.",
+            "type": "victim",
         },
     ],
 }
 
 
-URGENCY_MAP = {
-    "criminal": "immediate",
-    "dowry_harassment": "immediate",
-    "cyber": "immediate",
-    "civil": "within_week",
-    "consumer": "within_week",
-    "family": "within_week",
-    "default": "within_week",
+# ── ACCUSED Roadmap Templates (NEW) ───────────────────────────────────────────
+
+ACCUSED_ROADMAPS: dict[str, list[dict]] = {
+
+    "criminal_accused": [
+        {
+            "step_number": 1,
+            "action": "DO NOT speak to police without a lawyer present. Exercise your right to silence.",
+            "whom_to_approach": "Do not approach police alone — contact a lawyer FIRST",
+            "timeline": "IMMEDIATELY — before any police interaction",
+            "documents_needed": [],
+            "tips": (
+                "Under Article 20(3) of the Constitution, you cannot be compelled to be a witness "
+                "against yourself. You have the right to remain silent. Anything you say CAN and "
+                "WILL be used against you in court. Say only: 'I want to speak to my lawyer first.'"
+            ),
+            "warning": "DO NOT confess, even partially. Even a partial admission is admissible in court.",
+            "type": "accused",
+        },
+        {
+            "step_number": 2,
+            "action": "Immediately contact a criminal defence lawyer. This is your most important step.",
+            "whom_to_approach": "Criminal Defence Lawyer / District Legal Services Authority (DLSA) for free legal aid",
+            "timeline": "Within the next 1-2 hours",
+            "documents_needed": [
+                "Any documents related to the alleged incident",
+                "Your ID proof (Aadhar Card)",
+                "Contact details of witnesses who can support you",
+            ],
+            "tips": (
+                "Free legal aid is available if you cannot afford a lawyer (call DLSA: 15100). "
+                "Your lawyer can: negotiate bail, challenge evidence, prepare your defence, "
+                "and advise you on whether to cooperate with police."
+            ),
+            "warning": "Do not hire a lawyer recommended by police — they may not act in your interest.",
+            "type": "accused",
+        },
+        {
+            "step_number": 3,
+            "action": "Understand your arrest rights if police come to arrest you.",
+            "whom_to_approach": "Know your rights — inform a family member immediately upon arrest",
+            "timeline": "If police arrive for arrest",
+            "documents_needed": [],
+            "tips": (
+                "Under CrPC Section 50, police MUST inform you: (1) The grounds of arrest; "
+                "(2) Your right to bail (if bailable offence); (3) Your right to be produced before "
+                "a Magistrate within 24 hours (Article 22, Constitution). "
+                "You have the right to inform a family member or friend about your arrest (CrPC 50A)."
+            ),
+            "warning": (
+                "Do not resist arrest physically — this adds Section 353 IPC (assault on public servant). "
+                "Cooperate physically but stay silent legally."
+            ),
+            "type": "accused",
+        },
+        {
+            "step_number": 4,
+            "action": "Apply for anticipatory bail immediately if you fear arrest (Section 438 CrPC).",
+            "whom_to_approach": "Sessions Court or High Court — through your lawyer",
+            "timeline": "Before arrest — as soon as possible",
+            "documents_needed": [
+                "Anticipatory bail application (prepared by lawyer)",
+                "Your ID and address proof",
+                "Evidence of your good conduct / character certificates",
+                "Surety details (person who will stand guarantee)",
+            ],
+            "tips": (
+                "Anticipatory bail protects you from arrest. If granted, police cannot arrest you "
+                "without court permission. This is crucial if the offence is non-bailable."
+            ),
+            "warning": "This must be filed BEFORE arrest. After arrest, you need regular bail (Section 437/439 CrPC).",
+            "type": "accused",
+        },
+        {
+            "step_number": 5,
+            "action": "After arrest: Apply for regular bail at the appropriate court.",
+            "whom_to_approach": "Magistrate Court (bailable offences) or Sessions Court (non-bailable)",
+            "timeline": "Within 24 hours of arrest — you must be produced before Magistrate",
+            "documents_needed": [
+                "Bail application (prepared by lawyer)",
+                "ID and address proof",
+                "Surety / bail bond",
+                "Evidence of ties to community (job, family, property)",
+            ],
+            "tips": (
+                "For bailable offences (like IPC 379-theft): bail is a right, police must grant it. "
+                "For non-bailable offences (like IPC 302-murder): only court can grant bail. "
+                "Bail conditions typically include: not leaving city, reporting to police weekly, "
+                "not contacting witnesses."
+            ),
+            "type": "accused",
+        },
+        {
+            "step_number": 6,
+            "action": "Prepare your defence — understand the charges and build your case with your lawyer.",
+            "whom_to_approach": "Criminal Defence Lawyer",
+            "timeline": "Ongoing — from day 1 until case concludes",
+            "documents_needed": [
+                "Copy of FIR (you have a right to access it)",
+                "Charge sheet when filed by police",
+                "All evidence in your favour (alibi, CCTV, witnesses)",
+                "Character witnesses",
+            ],
+            "tips": (
+                "Your lawyer will: Challenge the FIR if false/exaggerated; Cross-examine witnesses; "
+                "File for discharge before framing of charges; Negotiate settlement/plea if appropriate. "
+                "The prosecution must PROVE guilt beyond reasonable doubt — you do not need to prove innocence."
+            ),
+            "warning": (
+                "Do NOT destroy evidence, tamper with witnesses, or flee. These are additional offences "
+                "(IPC 201 — causing disappearance of evidence, IPC 195A — threatening witness) "
+                "and will severely damage your case."
+            ),
+            "type": "accused",
+        },
+    ],
+
+    "theft_accused": [
+        {
+            "step_number": 1,
+            "action": "Do NOT admit to anything. Exercise your right to silence immediately.",
+            "whom_to_approach": "Contact a lawyer before speaking to anyone",
+            "timeline": "Immediately",
+            "documents_needed": [],
+            "tips": "Say only: 'I want to speak to my lawyer.' Nothing else.",
+            "warning": "A confession made to police is NOT admissible in court (Indian Evidence Act Section 25), but statements made to a Magistrate are. Do not go to Magistrate without a lawyer.",
+            "type": "accused",
+        },
+        {
+            "step_number": 2,
+            "action": "Hire a criminal defence lawyer immediately.",
+            "whom_to_approach": "Criminal Lawyer / DLSA for free legal aid (call 15100)",
+            "timeline": "Within 1-2 hours",
+            "documents_needed": ["Your ID proof", "Details of the alleged incident", "Names of witnesses in your favour"],
+            "tips": "For IPC 379 (theft) — it is cognizable and non-bailable. Police can arrest without warrant. Bail can be obtained from court.",
+            "type": "accused",
+        },
+        {
+            "step_number": 3,
+            "action": "Apply for anticipatory bail before arrest, or regular bail after arrest.",
+            "whom_to_approach": "Magistrate Court through your lawyer",
+            "timeline": "Before arrest: anticipatory bail. After arrest: within 24 hours",
+            "documents_needed": ["Bail application", "ID proof", "Surety details"],
+            "tips": (
+                "Theft (IPC 379) is punishable up to 3 years. First-time offenders often get bail. "
+                "If you return the stolen property, this may help in bail and sentencing."
+            ),
+            "warning": "Do not flee or hide — this creates additional charges and damages your bail application.",
+            "type": "accused",
+        },
+        {
+            "step_number": 4,
+            "action": "Explore settlement / compensation to the victim through your lawyer.",
+            "whom_to_approach": "Through lawyer — civil settlement or Lok Adalat",
+            "timeline": "After consulting lawyer",
+            "documents_needed": ["Settlement agreement", "Proof of compensation paid"],
+            "tips": (
+                "In property offences like theft, if stolen property is returned and compensation paid, "
+                "courts may take a lenient view during sentencing. Compounding (compromise) is possible "
+                "in some offences with the victim's consent."
+            ),
+            "warning": "Never approach the victim directly to settle — this may be seen as witness tampering (IPC 195A).",
+            "type": "accused",
+        },
+        {
+            "step_number": 5,
+            "action": "Prepare your defence with your lawyer — challenge evidence and prosecution case.",
+            "whom_to_approach": "Criminal Defence Lawyer",
+            "timeline": "Ongoing",
+            "documents_needed": ["FIR copy", "Charge sheet", "Evidence in your favour", "Alibi if any"],
+            "tips": (
+                "Your lawyer will examine: Was the identification of accused proper? "
+                "Was evidence collected following proper procedure? "
+                "Were there any witnesses who can support your version? "
+                "Prosecution must prove guilt beyond reasonable doubt."
+            ),
+            "type": "accused",
+        },
+    ],
+
+    "civil_accused": [
+        {
+            "step_number": 1,
+            "action": "Read the legal notice carefully and do not ignore it.",
+            "whom_to_approach": "Consult a civil lawyer immediately",
+            "timeline": "Within 24-48 hours of receiving notice",
+            "documents_needed": ["The legal notice received", "All documents related to the dispute"],
+            "tips": "Ignoring a legal notice does not make it go away — it can lead to court proceedings against you.",
+            "type": "accused",
+        },
+        {
+            "step_number": 2,
+            "action": "Consult a civil/commercial lawyer and prepare a reply to the legal notice.",
+            "whom_to_approach": "Civil Defence Lawyer",
+            "timeline": "Within the time period mentioned in the notice (usually 15-30 days)",
+            "documents_needed": ["Legal notice", "Contracts/agreements", "Payment records", "Communication records"],
+            "tips": "A well-drafted reply preserves your legal position and shows good faith.",
+            "type": "accused",
+        },
+        {
+            "step_number": 3,
+            "action": "Explore mediation or settlement before the matter reaches court.",
+            "whom_to_approach": "Lok Adalat / Mediation Centre / through lawyers",
+            "timeline": "Before court filing",
+            "documents_needed": ["Settlement terms", "Evidence supporting your position"],
+            "tips": "Settlement saves time, money, and reputation. Lok Adalat awards are final and binding with no court fees.",
+            "type": "accused",
+        },
+        {
+            "step_number": 4,
+            "action": "If case goes to court, file a written statement defending your position.",
+            "whom_to_approach": "Civil Court through your lawyer",
+            "timeline": "Within 30 days of summons (can be extended)",
+            "documents_needed": ["Written statement prepared by lawyer", "All supporting evidence"],
+            "tips": "You have the right to present your side. The burden of proof is on the plaintiff (the person suing you).",
+            "type": "accused",
+        },
+    ],
 }
 
 
+# ── Pros/Cons Awareness (NEW) ─────────────────────────────────────────────────
+
+ACCUSED_PROS_CONS = {
+    "cooperation": {
+        "pros": [
+            "May get bail more easily if cooperative",
+            "Court may view favourably during sentencing",
+            "Avoids additional charges like obstruction of justice",
+        ],
+        "cons": [
+            "Statements may be used against you",
+            "Over-cooperation without legal advice can harm defence",
+        ],
+    },
+    "confession": {
+        "pros": [
+            "May reduce sentence if genuine remorse shown",
+            "Can help negotiate plea bargain (Section 265B CrPC)",
+        ],
+        "cons": [
+            "Cannot be taken back once made before Magistrate",
+            "Directly proves guilt — prosecution's job becomes easy",
+            "May lead to maximum punishment",
+        ],
+    },
+    "fleeing": {
+        "pros": ["Short-term avoidance of arrest"],
+        "cons": [
+            "Makes you look guilty to court",
+            "Additional offence: non-bailable warrant issued",
+            "Property can be attached under Section 83 CrPC",
+            "Bail becomes very difficult to obtain",
+            "Adds Section 174A IPC (failure to appear) charge",
+        ],
+    },
+    "settlement": {
+        "pros": [
+            "Faster resolution",
+            "Avoids criminal record in compoundable offences",
+            "Saves legal costs and time",
+            "Less stress and uncertainty",
+        ],
+        "cons": [
+            "Must pay compensation to victim",
+            "Not all offences can be compounded (IPC 320)",
+            "Court must approve the settlement",
+        ],
+    },
+}
+
+
+# ── Urgency Map ────────────────────────────────────────────────────────────────
+
+URGENCY_MAP = {
+    "criminal_accused":  "immediate",
+    "theft_accused":     "immediate",
+    "civil_accused":     "within_week",
+    "criminal":          "immediate",
+    "dowry_harassment":  "immediate",
+    "cyber":             "immediate",
+    "civil":             "within_week",
+    "consumer":          "within_week",
+    "family":            "within_week",
+    "default":           "within_week",
+}
+
 LEGAL_AID_CONTACTS = [
-    {
-        "name": "National Legal Services Authority (NALSA)",
-        "phone": "15100",
-        "website": "nalsa.gov.in",
-        "description": "Free legal aid for eligible citizens",
-    },
-    {
-        "name": "Women's Helpline",
-        "phone": "181",
-        "website": "ncw.nic.in",
-        "description": "24/7 helpline for women in distress",
-    },
-    {
-        "name": "National Emergency",
-        "phone": "112",
-        "website": "112.gov.in",
-        "description": "Police, Fire, Ambulance — unified emergency number",
-    },
-    {
-        "name": "Cyber Crime Reporting",
-        "phone": "1930",
-        "website": "cybercrime.gov.in",
-        "description": "Report cyber fraud and cyber crimes",
-    },
-    {
-        "name": "Consumer Helpline",
-        "phone": "1800-11-4000",
-        "website": "consumerhelpline.gov.in",
-        "description": "Consumer complaints and grievances",
-    },
-    {
-        "name": "Child Helpline",
-        "phone": "1098",
-        "website": "childlineindia.org",
-        "description": "Children in need of care and protection",
-    },
+    {"name": "National Legal Services Authority (NALSA)", "phone": "15100",
+     "website": "nalsa.gov.in", "description": "Free legal aid for eligible citizens"},
+    {"name": "Women's Helpline",    "phone": "181",
+     "website": "ncw.nic.in",   "description": "24/7 helpline for women in distress"},
+    {"name": "National Emergency",  "phone": "112",
+     "website": "112.gov.in",   "description": "Police, Fire, Ambulance"},
+    {"name": "Cyber Crime",         "phone": "1930",
+     "website": "cybercrime.gov.in", "description": "Report cyber fraud"},
+    {"name": "Consumer Helpline",   "phone": "1800-11-4000",
+     "website": "consumerhelpline.gov.in", "description": "Consumer complaints"},
+    {"name": "Child Helpline",      "phone": "1098",
+     "website": "childlineindia.org", "description": "Children in need"},
 ]
 
 
+# ── Main Engine ────────────────────────────────────────────────────────────────
+
 class RoadmapEngine:
-    """Generates personalized legal action roadmaps."""
 
     def generate_roadmap(
         self,
-        query: str,
-        query_type: str,
-        entities: dict,
+        query:        str,
+        query_type:   str,
+        entities:     dict,
         ipc_sections: list[dict],
+        user_role:    str = "victim",   # "victim" or "accused"
     ) -> list[dict]:
         """
-        Generate a step-by-step roadmap based on query type and predicted sections.
-        Customizes templates with entity/section-specific details.
+        Generate roadmap based on user role.
+        If accused → lawyer-style defence roadmap with pros/cons.
+        If victim  → action roadmap to seek justice.
         """
-        # Determine template
+        predicted_keys = [s.get("label_key", "") for s in ipc_sections]
+
+        if user_role == "accused":
+            return self._accused_roadmap(query, query_type, predicted_keys)
+        else:
+            return self._victim_roadmap(query, query_type, predicted_keys)
+
+    def _victim_roadmap(
+        self,
+        query:         str,
+        query_type:    str,
+        predicted_keys: list[str],
+    ) -> list[dict]:
+        """Standard victim roadmap."""
         template_key = query_type.lower()
 
-        # Special case: if IPC 498A predicted → use dowry_harassment
-        predicted_keys = [s.get("label_key", "") for s in ipc_sections]
+        # Special cases
         if "IPC_498A" in predicted_keys:
             template_key = "dowry_harassment"
 
-        template = ROADMAP_TEMPLATES.get(
-            template_key,
-            ROADMAP_TEMPLATES["default"]
-        )
+        template = VICTIM_ROADMAPS.get(template_key, VICTIM_ROADMAPS["criminal"])
+        steps    = copy.deepcopy(template)
 
-        # Deep copy and customize
-        import copy
-        steps = copy.deepcopy(template)
-
-        # Inject predicted section info into relevant steps
-        if ipc_sections:
+        # Inject predicted sections into relevant steps
+        if ipc_sections := [s for s in predicted_keys if s]:
             section_str = ", ".join(
-                f"{s.get('section','')} — {s.get('title','')}"
+                s.replace("_", " ").replace("IPC ", "IPC ").replace("CrPC ", "CrPC ")
                 for s in ipc_sections[:3]
             )
-            # Add section context to step 2 tips (FIR filing step usually)
             for step in steps:
                 if "FIR" in step["action"] or "police" in step["action"].lower():
                     step["tips"] += f"\n\nApplicable sections: {section_str}."
@@ -410,12 +558,81 @@ class RoadmapEngine:
 
         return steps
 
+    def _accused_roadmap(
+        self,
+        query:         str,
+        query_type:    str,
+        predicted_keys: list[str],
+    ) -> list[dict]:
+        """
+        Defence roadmap for accused persons.
+        Includes legal rights, bail strategy, pros/cons awareness.
+        """
+        # Choose best template
+        if any(k in predicted_keys for k in ["IPC_379", "IPC_380", "IPC_392", "IPC_395"]):
+            template_key = "theft_accused"
+        elif query_type in ("civil",):
+            template_key = "civil_accused"
+        else:
+            template_key = "criminal_accused"
+
+        steps = copy.deepcopy(ACCUSED_ROADMAPS.get(template_key, ACCUSED_ROADMAPS["criminal_accused"]))
+
+        # Add pros/cons awareness step
+        steps.append({
+            "step_number": len(steps) + 1,
+            "action": "Understand the pros and cons of each decision you make in this case.",
+            "whom_to_approach": "Discuss all options with your lawyer before deciding",
+            "timeline": "Before taking any action",
+            "documents_needed": [],
+            "tips": self._format_pros_cons(),
+            "warning": "Every decision in a criminal case has consequences. Make informed choices with legal guidance.",
+            "type": "accused",
+        })
+
+        return steps
+
+    def _format_pros_cons(self) -> str:
+        lines = ["Key decisions and their implications:"]
+        for decision, data in ACCUSED_PROS_CONS.items():
+            lines.append(f"\n{decision.upper()}:")
+            lines.append("  Pros: " + "; ".join(data["pros"]))
+            lines.append("  Cons: " + "; ".join(data["cons"]))
+        return "\n".join(lines)
+
+    def detect_user_role(self, query: str) -> str:
+        """Detect if user is victim or accused from query text."""
+        text = query.lower()
+
+        accused_signals = [
+            "i stole", "i took", "i hit", "i beat", "i killed", "i attacked",
+            "i threatened", "i cheated", "i did", "i committed", "i was caught",
+            "police caught me", "arrested me", "i ran away", "i fled",
+            "i am accused", "i am arrested", "case against me", "fir against me",
+            "complaint against me", "i broke into", "i snatched", "i robbed",
+            "i assaulted", "i molested", "i blackmailed", "i forged",
+            "i embezzled", "we stole", "we beat", "we attacked",
+            "mujh par case", "mere khilaf fir", "maine mara", "maine churaya",
+        ]
+        victim_signals = [
+            "someone attacked me", "i was attacked", "i was beaten", "i was robbed",
+            "my phone was stolen", "they hit me", "he hit me", "she hit me",
+            "i was cheated", "they cheated me", "i was threatened",
+            "help me", "what should i do", "i need help", "i am a victim",
+        ]
+
+        accused_score = sum(1 for sig in accused_signals if sig in text)
+        victim_score  = sum(1 for sig in victim_signals  if sig in text)
+
+        if accused_score > 0 and accused_score >= victim_score:
+            return "accused"
+        return "victim"
+
     def assess_urgency(self, query: str, query_type: str) -> str:
-        """Return urgency level: 'immediate' / 'within_24h' / 'within_week'"""
         q = query.lower()
-        if any(w in q for w in ["assault", "rape", "murder", "kidnap", "attack", "dying", "hurt"]):
+        if any(w in q for w in ["murder", "rape", "kidnap", "dying", "arrested"]):
             return "immediate"
-        if any(w in q for w in ["threat", "harassment", "blackmail", "stalking"]):
+        if any(w in q for w in ["threat", "harassment", "blackmail", "caught"]):
             return "immediate"
         return URGENCY_MAP.get(query_type.lower(), "within_week")
 

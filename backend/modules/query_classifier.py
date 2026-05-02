@@ -95,3 +95,45 @@ class QueryClassifier:
             domain: sum(1 for kw in keywords if kw in text_lower)
             for domain, keywords in DOMAIN_KEYWORDS.items()
         }
+
+# Add these at the bottom of query_classifier.py
+
+ACCUSED_KEYWORDS = [
+    "i stole", "i took", "i hit", "i beat", "i killed", "i attacked",
+    "i threatened", "i cheated", "i fraud", "i did", "i committed",
+    "we stole", "we took", "we beat", "we attacked", "i was caught",
+    "police caught me", "arrested me", "i ran away", "i fled",
+    "i am accused", "i am arrested", "case against me", "fir against me",
+    "complaint against me", "charge against me", "i broke into",
+    "i snatched", "i robbed", "i assaulted", "i molested", "i raped",
+    "i blackmailed", "i threatened to kill", "i forged", "i embezzled",
+    "मैंने मारा", "मैंने चुराया", "मुझ पर केस", "मेरे खिलाफ fir",
+]
+
+VICTIM_KEYWORDS = [
+    "someone attacked me", "i was attacked", "i was beaten", "i was robbed",
+    "my phone was stolen", "they hit me", "he hit me", "she hit me",
+    "i was cheated", "they cheated me", "i was threatened", "help me",
+    "what should i do", "someone stole", "i am victim", "i need help",
+]
+
+def detect_user_role(self, text: str) -> str:
+    """
+    Detect if the user is:
+    - 'accused'  : they committed the act
+    - 'victim'   : they suffered the act
+    - 'witness'  : third party
+    - 'unknown'  : unclear
+    """
+    text_lower = text.lower()
+
+    accused_score = sum(1 for kw in ACCUSED_KEYWORDS if kw in text_lower)
+    victim_score  = sum(1 for kw in VICTIM_KEYWORDS  if kw in text_lower)
+
+    if accused_score > victim_score and accused_score > 0:
+        return "accused"
+    elif victim_score > accused_score and victim_score > 0:
+        return "victim"
+    elif accused_score > 0:
+        return "accused"
+    return "victim"  # default assumption

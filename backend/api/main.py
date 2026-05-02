@@ -184,14 +184,19 @@ async def analyze(body: dict):
         explanation = "Explanation not available."
 
     # 7. Roadmap
+    # 7. Roadmap — detect if user is victim or accused
     try:
+        user_role = roadmap_eng.detect_user_role(working_query)
+        logger.info(f"User role detected: {user_role}")
         roadmap = roadmap_eng.generate_roadmap(
             query=working_query,
             query_type=query_type,
             entities=entities,
             ipc_sections=ipc_sections,
+            user_role=user_role,
         )
-    except Exception:
+    except Exception as e:
+        logger.error(f"Roadmap error: {e}")
         roadmap = []
 
     # 8. Summary via Mistral/GPT-2
@@ -209,6 +214,7 @@ async def analyze(body: dict):
 
     return {
         "query_type":        query_type,
+        "user_role":         user_role if 'user_role' in dir() else "victim", 
         "detected_language": detected_lang,
         "translated_query":  translated_query,
         "entities":          entities,
