@@ -1,6 +1,7 @@
 // frontend/src/pages/HomePage.jsx
 import React from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
+import toast from "react-hot-toast";
 import "./HomePage.css";
 
 const FEATURES = [
@@ -43,6 +44,21 @@ const STEPS = [
 ];
 
 export default function HomePage() {
+  const navigate = useNavigate();
+
+  const handleStartCaseChat = () => {
+    const hasCaseContext = Boolean(sessionStorage.getItem("nyayaai_result"));
+    if (hasCaseContext) {
+      navigate("/case-chat");
+      return;
+    }
+    toast("Please analyze your case first, then start chat.", {
+      duration: 3500,
+      style: { background: "#fef9ec", color: "#7a5a00" },
+    });
+    navigate("/analyze");
+  };
+
   return (
     <div className="home">
       {/* ── Hero ─────────────────────────────────────────────── */}
@@ -121,6 +137,17 @@ export default function HomePage() {
           <p className="section-subtitle">
             A complete AI legal analysis system — no external APIs, fully self-trained.
           </p>
+          <div className="case-chat-cta card card--gold">
+            <div>
+              <h3 className="case-chat-cta__title">Case-Based Chat Assistant</h3>
+              <p className="case-chat-cta__desc">
+                Continue your case with follow-up legal questions, clarifications, and guided next steps.
+              </p>
+            </div>
+            <button className="btn btn--primary" onClick={handleStartCaseChat}>
+              Start Case Chat
+            </button>
+          </div>
           <div className="features-grid">
             {FEATURES.map((f) => (
               <div className="feature-card card" key={f.title}>

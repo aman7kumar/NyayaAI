@@ -1,14 +1,16 @@
 {
   "base_model":    "law-ai/InLegalBERT",
-  "train_file":    "backend/data/classifier_train.jsonl",
+  "train_file":    "training/data_prep/raw/legal_dataset_v5_100k.jsonl",
+  "label_map":     "training/data_prep/raw/label_map_v5.json",
   "output_dir":    "backend/models/saved/ipc_classifier",
   "max_len":       128,
-  "batch_size":    8,
+  "batch_size":    32,
   "epochs":        8,
   "learning_rate": 2e-05,
   "warmup_ratio":  0.1,
   "weight_decay":  0.01,
-  "threshold":     0.25,
+  "threshold":     0.30,
+  "label_smoothing": 0.1,
   "seed":          42,
-  "num_workers":   0
+  "num_workers":   4
 }

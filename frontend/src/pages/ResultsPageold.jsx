@@ -15,6 +15,7 @@ const inferDomainFromResult = (result) => {
   const crpcCount = result?.crpc_sections?.length || 0;
   const totalCriminalSections = ipcCount + crpcCount;
 
+  // If criminal sections are identified, treat as criminal matter.
   if (totalCriminalSections > 0) return "criminal";
 
   const textBlob = [
@@ -23,6 +24,7 @@ const inferDomainFromResult = (result) => {
     result?.translated_query || "",
   ].join(" ").toLowerCase();
 
+  // Use constitutional-rights label when rights indicators are present and no criminal sections exist.
   if (/(article\s*14|article\s*19|article\s*21|constitution|fundamental right|writ|high court|supreme court)/i.test(textBlob)) {
     return "constitutional";
   }
@@ -60,12 +62,6 @@ export default function ResultsPage() {
     explanation, roadmap, summary,
   } = result;
 
-  // ── Role resolution ────────────────────────────────────
-  // Normalise to lowercase string; fall back to "victim" so existing
-  // data that has no user_role still renders the standard (victim) view.
-  const userRole = (result?.user_role || "victim").toString().trim().toLowerCase();
-  const isAccused = userRole === "accused";
-
   const allSections = [...(ipc_sections || []), ...(crpc_sections || [])];
 
   const TABS = [
@@ -77,14 +73,14 @@ export default function ResultsPage() {
   ];
 
   const domainLabels = {
-    criminal:      { label: "Criminal",                   color: "badge--red"  },
-    civil:         { label: "Civil",                      color: "badge--blue" },
-    consumer:      { label: "Consumer",                   color: "badge--green"},
-    family:        { label: "Family",                     color: "badge--gold" },
-    cyber:         { label: "Cyber",                      color: "badge--navy" },
-    constitutional:{ label: "Constitutional / Rights",    color: "badge--blue" },
-    rights:        { label: "Constitutional / Rights",    color: "badge--blue" },
-    default:       { label: "General",                    color: "badge--gold" },
+    criminal: { label: "Criminal", color: "badge--red" },
+    civil:    { label: "Civil",    color: "badge--blue" },
+    consumer: { label: "Consumer", color: "badge--green" },
+    family:   { label: "Family",   color: "badge--gold" },
+    cyber:    { label: "Cyber",    color: "badge--navy" },
+    constitutional: { label: "Constitutional / Rights", color: "badge--blue" },
+    rights: { label: "Constitutional / Rights", color: "badge--blue" },
+    default:  { label: "General",  color: "badge--gold" },
   };
 
   const inferredDomain = inferDomainFromResult(result);
@@ -106,19 +102,16 @@ export default function ResultsPage() {
   return (
     <div className="results-page section">
       <div className="container">
-
-        {/* ── Header ──────────────────────────────────────── */}
+        {/* ── Header ─────────────────────────────────────── */}
         <div className="results-header">
           <div className="results-header__meta">
-            <span className={`badge ${domain.color}`}>{domain.label} Matter</span>
-
-            {/* Role badge — derived from isAccused so it can never show the
-                wrong label even if user_role has unexpected casing */}
-            {isAccused ? (
-              <span className="badge badge--red">⚠️ Accused Person — Defence Guidance</span>
-            ) : (
-              <span className="badge badge--green">🙋 Victim — Action Guidance</span>
-            )}
+              <span className={`badge ${domain.color}`}>{domain.label} Matter</span>
+              {result.user_role === "accused" && (
+                  <span className="badge badge--red">⚠️ Accused Person — Defence Guidance</span>
+              )}
+              {result.user_role === "victim" && (
+                  <span className="badge badge--green">🙋 Victim — Action Guidance</span>
+              )}
           </div>
           <h1 className="results-title">Analysis Results</h1>
           {translated_query && (
@@ -164,20 +157,12 @@ export default function ResultsPage() {
         {/* ── Tab content ─────────────────────────────────── */}
         <div className="results-content">
 
-          {/* ── SUMMARY ─────────────────────────────────────
-              Card colour  : gold  for victim | red  for accused
-              Card title   : ⚖️ Legal Summary | ⚠️ Defence Summary
-          ─────────────────────────────────────────────────── */}
+          {/* SUMMARY */}
           {activeTab === "summary" && (
             <div className="tab-panel">
-              <div className={`card ${isAccused ? "card--red" : "card--gold"} summary-card`}>
-                <h2 className="summary-card__title">
-                  {isAccused ? "⚠️ Defence Summary" : "⚖️ Legal Summary"}
-                </h2>
-                <div
-                  className={`divider ${isAccused ? "divider--red" : "divider--gold"}`}
-                  style={{ margin: "16px 0" }}
-                />
+              <div className="card card--gold summary-card">
+                <h2 className="summary-card__title">⚖️ Legal Summary</h2>
+                <div className="divider--gold divider" style={{ margin: "16px 0" }} />
                 <div className="summary-text markdown-body">
                   <ReactMarkdown remarkPlugins={[remarkGfm]}>
                     {summary || "Analysis complete. View other tabs for detailed results."}
@@ -189,7 +174,7 @@ export default function ResultsPage() {
                   className="btn btn--primary"
                   onClick={() => setActiveTab("roadmap")}
                 >
-                  {isAccused ? "See Your Defence Roadmap →" : "See Your Action Roadmap →"}
+                  See Your Action Roadmap →
                 </button>
                 <button
                   className="btn btn--outline"
@@ -211,7 +196,7 @@ export default function ResultsPage() {
             </div>
           )}
 
-          {/* ── IPC / CrPC SECTIONS ─────────────────────── */}
+          {/* IPC / CrPC SECTIONS */}
           {activeTab === "sections" && (
             <div className="tab-panel">
               {allSections.length === 0 ? (
@@ -249,7 +234,7 @@ export default function ResultsPage() {
             </div>
           )}
 
-          {/* ── EXPLANATION ─────────────────────────────── */}
+          {/* EXPLANATION */}
           {activeTab === "explanation" && (
             <div className="tab-panel">
               {explanation ? (
@@ -264,85 +249,53 @@ export default function ResultsPage() {
             </div>
           )}
 
-          {/* ── ROADMAP ─────────────────────────────────────
-              Per-step styling when step.type === "accused"  OR
-              when the whole analysis is for an accused person:
-                • number circle  → red background
-                • left border    → red
-                • timeline badge → badge--red instead of badge--blue
-              Warning box only renders when step.warning exists.
-          ─────────────────────────────────────────────────── */}
+          {/* ROADMAP */}
           {activeTab === "roadmap" && (
             <div className="tab-panel">
               {!roadmap || roadmap.length === 0 ? (
                 <div className="empty-state">No roadmap generated.</div>
               ) : (
                 <div className="roadmap-timeline">
-                  {roadmap.map((step, i) => {
-                    // A step is "accused-styled" if the whole analysis is for
-                    // an accused person, OR the step itself carries type:"accused".
-                    const stepIsAccused = isAccused || step.type === "accused";
-
-                    return (
-                      <div
-                        className={`roadmap-step ${stepIsAccused ? "roadmap-step--accused" : ""}`}
-                        key={i}
-                      >
-                        {/* Number circle — red for accused, default for victim */}
-                        <div
-                          className={`roadmap-step__num ${stepIsAccused ? "roadmap-step__num--accused" : ""}`}
-                        >
-                          {step.step_number}
+                  {roadmap.map((step, i) => (
+                    <div className="roadmap-step" key={i}>
+                      <div className="roadmap-step__num">{step.step_number}</div>
+                      <div className="roadmap-step__body card">
+                        <div className="roadmap-step__header">
+                          <h3 className="roadmap-step__action">{step.action}</h3>
+                          <span className="badge badge--blue">{step.timeline}</span>
                         </div>
-
-                        <div
-                          className={`roadmap-step__body card ${stepIsAccused ? "roadmap-step__body--accused" : ""}`}
-                        >
-                          <div className="roadmap-step__header">
-                            <h3 className="roadmap-step__action">{step.action}</h3>
-                            {/* Timeline badge colour follows the accused flag */}
-                            <span className={`badge ${stepIsAccused ? "badge--red" : "badge--blue"}`}>
-                              {step.timeline}
-                            </span>
-                          </div>
-
-                          <div className="roadmap-step__approach">
-                            <strong>👤 Whom to approach:</strong> {step.whom_to_approach}
-                          </div>
-
-                          {step.documents_needed?.length > 0 && (
-                            <div className="roadmap-step__docs">
-                              <strong>📋 Documents needed:</strong>
-                              <ul>
-                                {step.documents_needed.map((d, j) => (
-                                  <li key={j}>{d}</li>
-                                ))}
-                              </ul>
-                            </div>
-                          )}
-
-                          {step.tips && (
-                            <div className="roadmap-step__tips">
-                              💡 {step.tips}
-                            </div>
-                          )}
-
-                          {/* Warning only renders when the field is truthy */}
-                          {step.warning && (
-                            <div className="roadmap-step__warning">
-                              ⚠️ <strong>Important:</strong> {step.warning}
-                            </div>
-                          )}
+                        <div className="roadmap-step__approach">
+                          <strong>👤 Whom to approach:</strong> {step.whom_to_approach}
                         </div>
+                        {step.documents_needed?.length > 0 && (
+                          <div className="roadmap-step__docs">
+                            <strong>📋 Documents needed:</strong>
+                            <ul>
+                              {step.documents_needed.map((d, j) => (
+                                <li key={j}>{d}</li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
+                        {step.tips && (
+                          <div className="roadmap-step__tips">
+                            💡 {step.tips}
+                          </div>
+                        )}
+                        {step.warning && (
+                          <div className="roadmap-step__warning">
+                            ⚠️ <strong>Important:</strong> {step.warning}
+                          </div>
+                        )}
                       </div>
-                    );
-                  })}
+                    </div>
+                  ))}
                 </div>
               )}
             </div>
           )}
 
-          {/* ── ENTITIES ────────────────────────────────── */}
+          {/* ENTITIES */}
           {activeTab === "entities" && (
             <div className="tab-panel">
               <div className="entities-grid">

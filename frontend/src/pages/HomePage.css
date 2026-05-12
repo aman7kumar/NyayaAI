@@ -30,6 +30,10 @@
   margin-bottom: 24px;
 }
 
+.hero .badge--gold {
+  color: var(--gold-light);
+}
+
 .hero__title {
   font-family: var(--font-display);
   font-size: clamp(2.2rem, 5vw, 3.5rem);
@@ -175,6 +179,24 @@
   gap: 24px;
 }
 
+.case-chat-cta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 20px;
+}
+
+.case-chat-cta__title {
+  margin-bottom: 6px;
+  font-size: 1.15rem;
+}
+
+.case-chat-cta__desc {
+  color: var(--text-secondary);
+  font-size: 0.92rem;
+}
+
 .feature-card {
   transition: transform var(--t-mid), box-shadow var(--t-mid);
 }
@@ -237,4 +259,5 @@
   .stats-bar__inner { grid-template-columns: repeat(2, 1fr); }
   .stats-bar__item:nth-child(2) { border-right: none; }
   .hero__content { padding: 48px 16px; }
+  .case-chat-cta { flex-direction: column; align-items: flex-start; }
 }

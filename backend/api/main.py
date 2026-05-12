@@ -1,10 +1,13 @@
 """
-backend/api/main.py — Fixed complete version
+backend/api/main.py
 """
 
 import logging
 import io
 import os
+import sys
+import threading
+import traceback
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -15,6 +18,10 @@ load_dotenv(Path(__file__).parent.parent / ".env", override=True)
 
 from fastapi import FastAPI, HTTPException, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
+from backend.api.routes.chat import router as chat_router
+from backend.modules.chat_llm import build_llm_client
+from backend.modules.chat_store import ChatStore
+from backend.modules.ocr_postprocess import improve_ocr_text
 
 logging.basicConfig(
     level=logging.INFO,
@@ -25,13 +32,61 @@ logger = logging.getLogger(__name__)
 # Global state
 app_state: dict = {}
 
+# Event set when OCR init finishes (success or failure)
+_ocr_ready = threading.Event()
+
+
+def _safe_print(message: str) -> None:
+    """Print message without crashing on Windows cp1252 consoles."""
+    try:
+        print(message, flush=True)
+    except UnicodeEncodeError:
+        print(message.encode("ascii", "replace").decode("ascii"), flush=True)
+
+
+def _init_ocr_background():
+    """Initialize OCR in a background thread."""
+    # ✅ Ensure the project root is on sys.path inside the thread
+    project_root = str(Path(__file__).parent.parent.parent)
+    if project_root not in sys.path:
+        sys.path.insert(0, project_root)
+
+    logger.info("🔄  [OCR thread] Importing OCRModule …")
+    _safe_print("🔄  [OCR thread] Importing OCRModule …")
+
+    try:
+        from backend.models.ocr_module import OCRModule
+        logger.info("🔄  [OCR thread] OCRModule imported, calling OCRModule() …")
+        _safe_print("🔄  [OCR thread] Calling OCRModule() …")
+
+        ocr = OCRModule()
+        app_state["ocr_module"] = ocr
+
+        if ocr._engine:
+            msg = f"✅  [OCR thread] OCR ready — engine: {ocr._engine}"
+        else:
+            msg = "⚠️  [OCR thread] OCR initialized but no engine available"
+
+        logger.info(msg)
+        _safe_print(msg)
+
+    except Exception as e:
+        err = f"❌  [OCR thread] OCR Module failed: {e}\n{traceback.format_exc()}"
+        logger.error(err)
+        _safe_print(err)
+        app_state["ocr_module"] = None
+
+    finally:
+        _ocr_ready.set()
+        _safe_print("🏁  [OCR thread] Init complete (event set)")
+        logger.info("🏁  [OCR thread] Init complete")
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Load all models on startup."""
     logger.info("🔄  Loading models …")
     app.extra["app_state"] = app_state
-    app.state.app_state = app_state
+    app.state.app_state    = app_state
 
     # IPC Classifier
     try:
@@ -51,14 +106,14 @@ async def lifespan(app: FastAPI):
         logger.error(f"❌  RAG Engine failed: {e}")
         app_state["rag_engine"] = None
 
-    # OCR Module
-    try:
-        from backend.models.ocr_module import OCRModule
-        app_state["ocr_module"] = OCRModule()
-        logger.info("✅  OCR Module loaded")
-    except Exception as e:
-        logger.error(f"❌  OCR Module failed: {e}")
-        app_state["ocr_module"] = None
+    # OCR — background thread
+    _ocr_thread = threading.Thread(
+        target=_init_ocr_background,
+        name="ocr-init",
+        daemon=True,
+    )
+    _ocr_thread.start()
+    logger.info("🔄  OCR initializing in background …")
 
     # Roadmap Engine
     try:
@@ -69,7 +124,17 @@ async def lifespan(app: FastAPI):
         logger.error(f"❌  Roadmap Engine failed: {e}")
         app_state["roadmap_engine"] = None
 
-    logger.info("✅  All models loaded and ready.")
+    # Chat stack
+    try:
+        app.extra["chat_store"] = ChatStore()
+        app.extra["chat_llm"] = build_llm_client()
+        logger.info("✅  Case chat stack initialized")
+    except Exception as e:
+        logger.error(f"❌  Case chat initialization failed: {e}")
+        app.extra["chat_store"] = None
+        app.extra["chat_llm"] = None
+
+    logger.info("✅  Core models loaded. OCR still initializing in background.")
     yield
     app_state.clear()
     logger.info("🛑  Models unloaded.")
@@ -94,6 +159,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+app.include_router(chat_router, prefix="/api/v1")
+
 
 @app.get("/")
 async def root():
@@ -102,12 +169,18 @@ async def root():
 
 @app.get("/api/v1/health")
 async def health():
+    ocr      = app_state.get("ocr_module")
+    ocr_done = _ocr_ready.is_set()
     return {
         "status": "ok",
         "models": {
             "ipc_classifier": app_state.get("ipc_classifier") is not None,
             "rag_engine":     app_state.get("rag_engine")     is not None,
-            "ocr_module":     app_state.get("ocr_module")     is not None,
+            "ocr_module":     ocr is not None,
+            "ocr_engine":     (
+                ocr._engine if ocr
+                else ("initializing…" if not ocr_done else "failed")
+            ),
             "roadmap_engine": app_state.get("roadmap_engine") is not None,
         }
     }
@@ -115,10 +188,9 @@ async def health():
 
 @app.post("/api/v1/analyze")
 async def analyze(body: dict):
-    """Full legal analysis pipeline."""
     query = body.get("query", "").strip()
     if not query or len(query) < 5:
-        raise HTTPException(400, "Query too short. Please describe your situation.")
+        raise HTTPException(400, "Query too short.")
 
     ipc_clf     = app_state.get("ipc_classifier")
     rag         = app_state.get("rag_engine")
@@ -127,7 +199,6 @@ async def analyze(body: dict):
     if not ipc_clf or not rag:
         raise HTTPException(503, "Models not loaded yet. Please wait and retry.")
 
-    # 1. Language detection
     try:
         from backend.modules.multilingual import MultilingualModule
         ml               = MultilingualModule()
@@ -142,27 +213,23 @@ async def analyze(body: dict):
         translated_query = None
         working_query    = query
 
-    # 2. Query classification
     try:
         from backend.modules.query_classifier import QueryClassifier
         query_type = QueryClassifier().classify(working_query)
     except Exception:
         query_type = "criminal"
 
-    # 3. Entity extraction
     try:
         from backend.modules.entity_extractor import EntityExtractor
         entities = EntityExtractor().extract(working_query)
     except Exception:
         entities = {}
 
-    # 4. RAG retrieval
     try:
         rag_chunks = rag.retrieve(working_query, top_k=5)
     except Exception:
         rag_chunks = []
 
-    # 5. IPC prediction
     try:
         predictions   = ipc_clf.predict(working_query, context_chunks=rag_chunks)
         ipc_sections  = [s for s in predictions if s.get("act") == "IPC"]
@@ -172,7 +239,6 @@ async def analyze(body: dict):
         ipc_sections  = []
         crpc_sections = []
 
-    # 6. Explainability
     try:
         from backend.modules.explainability import ExplainabilityModule
         explanation = ExplainabilityModule().generate_explanation(
@@ -183,23 +249,18 @@ async def analyze(body: dict):
     except Exception:
         explanation = "Explanation not available."
 
-    # 7. Roadmap
-    # 7. Roadmap — detect if user is victim or accused
+    user_role = "victim"
+    roadmap   = []
     try:
         user_role = roadmap_eng.detect_user_role(working_query)
-        logger.info(f"User role detected: {user_role}")
-        roadmap = roadmap_eng.generate_roadmap(
-            query=working_query,
-            query_type=query_type,
-            entities=entities,
-            ipc_sections=ipc_sections,
+        roadmap   = roadmap_eng.generate_roadmap(
+            query=working_query, query_type=query_type,
+            entities=entities, ipc_sections=ipc_sections,
             user_role=user_role,
         )
     except Exception as e:
         logger.error(f"Roadmap error: {e}")
-        roadmap = []
 
-    # 8. Summary via Mistral/GPT-2
     try:
         summary = rag.generate_answer(
             query=working_query,
@@ -214,7 +275,7 @@ async def analyze(body: dict):
 
     return {
         "query_type":        query_type,
-        "user_role":         user_role if 'user_role' in dir() else "victim", 
+        "user_role":         user_role,
         "detected_language": detected_lang,
         "translated_query":  translated_query,
         "entities":          entities,
@@ -229,38 +290,67 @@ async def analyze(body: dict):
 
 @app.post("/api/v1/ocr")
 async def ocr_extract(file: UploadFile = File(...)):
-    """Extract text from image or PDF using PaddleOCR/EasyOCR."""
+    """Extract text from image or PDF."""
+
+    # Wait up to 180s for OCR to finish initializing
+    if not _ocr_ready.is_set():
+        logger.info("⏳  OCR request waiting for background init to complete …")
+        finished = _ocr_ready.wait(timeout=180)
+        if not finished:
+            raise HTTPException(
+                503,
+                "OCR is still initializing. Please try again in a moment."
+            )
+
     ocr = app_state.get("ocr_module")
     if not ocr:
-        raise HTTPException(503, "OCR module not loaded.")
+        raise HTTPException(503, "OCR failed to initialize. Check server logs.")
+    if ocr._engine is None:
+        raise HTTPException(503, "OCR engine unavailable. Check server logs.")
 
-    allowed = {"image/jpeg", "image/png", "image/webp", "application/pdf"}
-    if file.content_type not in allowed:
-        raise HTTPException(400, f"Unsupported file type: {file.content_type}")
+    content_type = (file.content_type or "").lower()
+    if not any(t in content_type for t in ("jpeg", "jpg", "png", "webp", "pdf")):
+        raise HTTPException(400, f"Unsupported type: {file.content_type}. Use JPEG/PNG/WebP/PDF.")
 
     content = await file.read()
+    if not content:
+        raise HTTPException(400, "Uploaded file is empty.")
     if len(content) > 15 * 1024 * 1024:
-        raise HTTPException(413, "File too large. Maximum 15MB.")
+        raise HTTPException(413, "File too large. Max 15MB.")
+
+    if   "pdf"  in content_type: mime = "application/pdf"
+    elif "png"  in content_type: mime = "image/png"
+    elif "webp" in content_type: mime = "image/webp"
+    else:                         mime = "image/jpeg"
+
+    logger.info(f"OCR request: {file.filename!r} {len(content)//1024}KB {mime}")
 
     try:
-        result   = ocr.extract(io.BytesIO(content), mime=file.content_type)
+        result   = ocr.extract(io.BytesIO(content), mime=mime)
         raw_text = result.get("text", "").strip()
+        cleaned_text = improve_ocr_text(raw_text)
+        logger.info(
+            f"OCR result — engine={result.get('engine')} "
+            f"words={len(raw_text.split()) if raw_text else 0} "
+            f"conf={result.get('confidence', 0):.2f}"
+        )
         return {
             "raw_text":          raw_text,
+            "cleaned_text":      cleaned_text,
             "confidence":        result.get("confidence", 0.0),
             "detected_language": result.get("language",   "unknown"),
             "word_count":        len(raw_text.split()) if raw_text else 0,
             "engine_used":       result.get("engine",     "unknown"),
             "pages":             result.get("pages",      1),
+            "success":           bool(raw_text),
         }
     except Exception as e:
-        logger.exception("OCR failed")
+        logger.exception("OCR processing failed")
         raise HTTPException(500, f"OCR error: {str(e)}")
 
 
 @app.post("/api/v1/roadmap")
 async def get_roadmap(body: dict):
-    """Generate legal action roadmap."""
     roadmap_eng = app_state.get("roadmap_engine")
     if not roadmap_eng:
         raise HTTPException(503, "Roadmap engine not loaded.")
@@ -278,3 +368,60 @@ async def get_roadmap(body: dict):
         "urgency_level":      roadmap_eng.assess_urgency(query, query_type),
         "legal_aid_contacts": roadmap_eng.get_legal_aid_contacts(),
     }
+
+
+@app.post("/api/v1/fir/upload")
+async def fir_upload(file: UploadFile = File(...)):
+    """
+    OCR + FIR analysis endpoint for case-chat.
+    Accepts image/pdf, returns extracted FIR text + structured FIR analysis.
+    """
+    if not _ocr_ready.is_set():
+        finished = _ocr_ready.wait(timeout=180)
+        if not finished:
+            raise HTTPException(503, "OCR is still initializing. Please try again.")
+
+    ocr = app_state.get("ocr_module")
+    if not ocr or ocr._engine is None:
+        raise HTTPException(503, "OCR engine unavailable.")
+
+    content_type = (file.content_type or "").lower()
+    if not any(t in content_type for t in ("jpeg", "jpg", "png", "webp", "pdf")):
+        raise HTTPException(400, f"Unsupported type: {file.content_type}. Use JPEG/PNG/WebP/PDF.")
+
+    content = await file.read()
+    if not content:
+        raise HTTPException(400, "Uploaded file is empty.")
+    if len(content) > 15 * 1024 * 1024:
+        raise HTTPException(413, "File too large. Max 15MB.")
+
+    if "pdf" in content_type:
+        mime = "application/pdf"
+    elif "png" in content_type:
+        mime = "image/png"
+    elif "webp" in content_type:
+        mime = "image/webp"
+    else:
+        mime = "image/jpeg"
+
+    try:
+        result = ocr.extract(io.BytesIO(content), mime=mime)
+        extracted_text = result.get("text", "").strip()
+        cleaned_text = improve_ocr_text(extracted_text)
+
+        from backend.modules.fir_analysis import analyze_fir_text
+        fir_analysis = analyze_fir_text(cleaned_text)
+
+        return {
+            "extracted_text": cleaned_text,
+            "raw_extracted_text": extracted_text,
+            "fir_analysis": fir_analysis,
+            "confidence": result.get("confidence", 0.0),
+            "detected_language": result.get("language", "unknown"),
+            "engine_used": result.get("engine", "unknown"),
+            "pages": result.get("pages", 1),
+            "success": bool(extracted_text),
+        }
+    except Exception as e:
+        logger.exception("FIR OCR upload failed")
+        raise HTTPException(500, f"FIR upload processing error: {str(e)}")

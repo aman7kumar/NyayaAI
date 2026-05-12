@@ -44,24 +44,28 @@ class IPCSection(BaseModel):
 
 class RoadmapStep(BaseModel):
     step_number: int
-    action: str           # What to do
-    whom_to_approach: str # Police / Court / Consumer Forum etc.
-    timeline: str         # "Immediately" / "Within 24 hrs" etc.
+    action: str                        # What to do
+    whom_to_approach: str              # Police / Court / Consumer Forum etc.
+    timeline: str                      # "Immediately" / "Within 24 hrs" etc.
     documents_needed: list[str]
     tips: str
+    # ── ADDED: fields present in accused roadmap steps ──────────────────────
+    warning: Optional[str] = None      # ⚠️ warning box shown for accused steps
+    type: Optional[str] = None         # "victim" | "accused" — drives UI styling
 
 
 class AnalyzeResponse(BaseModel):
-    query_type: str                  # criminal / civil / consumer / family
+    query_type: str                    # criminal / civil / consumer / family
+    user_role: str                     # "victim" | "accused" — ALWAYS returned
     detected_language: str
-    translated_query: Optional[str]  # If input was Hindi
-    entities: dict                   # Extracted legal entities
+    translated_query: Optional[str]    # If input was Hindi
+    entities: dict                     # Extracted legal entities
     ipc_sections: list[IPCSection]
     crpc_sections: list[IPCSection]
-    rag_context: list[str]           # Retrieved statute chunks
-    explanation: Optional[str]       # XAI reasoning
+    rag_context: list[str]             # Retrieved statute chunks
+    explanation: Optional[str]         # XAI reasoning
     roadmap: Optional[list[RoadmapStep]]
-    summary: str                     # Plain-language summary for citizen
+    summary: str                       # Plain-language summary for citizen
 
 
 # ── Dependency: get app_state models ─────────────────────────────────────────
@@ -89,8 +93,9 @@ async def analyze_legal_query(
     4. RAG: retrieve relevant IPC/CrPC statute chunks
     5. Run fine-tuned IPC classifier
     6. Generate XAI explanation
-    7. Build citizen roadmap
-    8. Return structured JSON
+    7. Detect user role (victim / accused) — ALWAYS, not just when roadmap enabled
+    8. Build citizen roadmap
+    9. Return structured JSON
     """
     state = request.app.extra.get("app_state", {})
     ipc_clf: "IPCClassifier" = state.get("ipc_classifier")
@@ -153,18 +158,29 @@ async def analyze_legal_query(
             rag_chunks=rag_chunks,
         )
 
-    # ── Step 7: Citizen Roadmap ────────────────────────────────────────────
+    # ── Step 7: Detect user role — ALWAYS run this, outside the roadmap block
+    #    This ensures user_role is ALWAYS in the response even if roadmap is off.
+    # ──────────────────────────────────────────────────────────────────────────
+    user_role = "victim"  # safe default
+    if roadmap_eng:
+        user_role = roadmap_eng.detect_user_role(working_query)
+    logger.info(f"Detected user_role: {user_role}")
+
+    # ── Step 8: Citizen Roadmap ────────────────────────────────────────────
     roadmap_steps = None
-    if body.include_roadmap:
+    if body.include_roadmap and roadmap_eng:
         raw_steps = roadmap_eng.generate_roadmap(
             query=working_query,
             query_type=query_type,
             entities=entities,
             ipc_sections=ipc_sections,
+            user_role=user_role,           # ← always correct role now
         )
+        # Use model_validate / dict unpacking safely — extra fields tolerated
+        # because RoadmapStep now declares `warning` and `type` as Optional.
         roadmap_steps = [RoadmapStep(**s) for s in raw_steps]
 
-    # ── Step 8: Plain-language Summary ────────────────────────────────────
+    # ── Step 9: Plain-language Summary ────────────────────────────────────
     summary = rag.generate_answer(
         query=working_query,
         retrieved_chunks=rag_chunks,
@@ -173,6 +189,7 @@ async def analyze_legal_query(
 
     return AnalyzeResponse(
         query_type=query_type,
+        user_role=user_role,               # ← always present in response
         detected_language=detected_lang,
         translated_query=translated_query,
         entities=entities,

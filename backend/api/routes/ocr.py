@@ -1,6 +1,13 @@
 """
 backend/api/routes/ocr.py
 OCR endpoint using PaddleOCR (primary) or EasyOCR (backup).
+
+Changes vs original:
+  - Passes byte_size to ocr.extract() so small-image upscaling triggers correctly.
+  - Adds ocr_status field: "extracted" | "empty" | "error"
+  - Never raises 503 for empty text — returns 200 with ocr_status="empty"
+    so the frontend can show a helpful "no text found" message instead of
+    a hard error that blocks the user from typing manually.
 """
 
 import io
@@ -8,6 +15,7 @@ import logging
 
 from fastapi import APIRouter, File, Request, UploadFile, HTTPException
 from pydantic import BaseModel
+from typing import Literal
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -20,6 +28,9 @@ class OCRResponse(BaseModel):
     word_count:        int
     engine_used:       str
     pages:             int
+    # NEW: lets the frontend distinguish "ran fine but found nothing" from
+    # "actually failed" without parsing the text or checking word_count.
+    ocr_status: Literal["extracted", "empty", "error"] = "extracted"
 
 
 @router.post(
@@ -35,6 +46,11 @@ async def extract_text_from_image(
     Accepts a FIR image or scanned document.
     Uses PaddleOCR (primary) or EasyOCR (backup).
     Supports Hindi + English mixed text.
+
+    Returns ocr_status:
+      "extracted" — text was found
+      "empty"     — image processed OK but no text detected (low quality / blank)
+      "error"     — OCR engine failed (not a quality problem)
     """
     state = request.app.extra.get("app_state", {})
     ocr   = state.get("ocr_module")
@@ -42,7 +58,6 @@ async def extract_text_from_image(
     if not ocr:
         raise HTTPException(503, "OCR module not loaded.")
 
-    # Validate file type
     allowed = {
         "image/jpeg", "image/png",
         "image/webp", "application/pdf",
@@ -55,7 +70,7 @@ async def extract_text_from_image(
         )
 
     content = await file.read()
-    if len(content) > 15 * 1024 * 1024:  # 15MB limit
+    if len(content) > 15 * 1024 * 1024:
         raise HTTPException(413, "File too large. Maximum 15MB.")
 
     if not content:
@@ -65,16 +80,27 @@ async def extract_text_from_image(
         result = ocr.extract(
             io.BytesIO(content),
             mime=file.content_type,
+            byte_size=len(content),      # NEW: enables small-image upscaling
         )
     except Exception as e:
         logger.exception("OCR processing failed")
         raise HTTPException(500, f"OCR error: {str(e)}")
 
-    # Check for error
-    if result.get("error") and not result.get("text"):
+    # Distinguish engine failure from "image processed but no text found"
+    has_error = bool(result.get("error"))
+    raw_text  = result.get("text", "").strip()
+
+    if has_error and not raw_text:
+        # Actual engine failure — raise so the frontend shows an error toast
         raise HTTPException(503, result["error"])
 
-    raw_text = result.get("text", "").strip()
+    # Determine status — never raise for empty text, just signal it
+    if raw_text:
+        ocr_status = "extracted"
+    elif has_error:
+        ocr_status = "error"    # partial failure but engine returned something
+    else:
+        ocr_status = "empty"    # engine ran fine, image just has no readable text
 
     return OCRResponse(
         raw_text=raw_text,
@@ -83,4 +109,5 @@ async def extract_text_from_image(
         word_count=len(raw_text.split()) if raw_text else 0,
         engine_used=result.get("engine", "unknown"),
         pages=result.get("pages", 1),
+        ocr_status=ocr_status,
     )

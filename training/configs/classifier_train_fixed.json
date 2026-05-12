@@ -1,0 +1,9 @@
+{
+  "_comment": "Reference paths for train_classifier_fixed.py — copy JSONL + label_map_v5.json into training/data_prep/raw/ or pass CLI args.",
+  "train_file":    "training/data_prep/raw/legal_dataset_train.jsonl",
+  "val_file":      "training/data_prep/raw/legal_dataset_val.jsonl",
+  "test_file":     "training/data_prep/raw/legal_dataset_test.jsonl",
+  "label_map":     "training/data_prep/raw/label_map_v5.json",
+  "output_dir":    "backend/models/saved/ipc_classifier",
+  "base_model":    "law-ai/InLegalBERT"
+}

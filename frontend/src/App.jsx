@@ -6,6 +6,7 @@ import HomePage from "./pages/HomePage";
 import AnalyzePage from "./pages/AnalyzePage";
 import ResultsPage from "./pages/ResultsPage";
 import RoadmapPage from "./pages/RoadmapPage";
+import CaseChatPage from "./pages/CaseChatPage";
 import Navbar from "./components/Navbar";
 import "./styles/global.css";
 
@@ -20,6 +21,7 @@ function App() {
             <Route path="/analyze"  element={<AnalyzePage />} />
             <Route path="/results"  element={<ResultsPage />} />
             <Route path="/roadmap"  element={<RoadmapPage />} />
+            <Route path="/case-chat" element={<CaseChatPage />} />
           </Routes>
         </main>
         <Toaster

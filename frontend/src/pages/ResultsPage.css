@@ -376,3 +376,43 @@
 .roadmap-step__body.accused-step {
   border-left: 3px solid var(--crimson);
 }
+
+/* ─────────────────────────────────────────────────────────────
+   ResultsPage.css  — ACCUSED-ROLE ADDITIONS
+   Paste these rules into your existing ResultsPage.css file.
+   They introduce the red-variant classes used by the JSX.
+───────────────────────────────────────────────────────────── */
+
+/* ── Summary card red variant (accused) ─────────────────── */
+.card--red {
+  border: 1.5px solid #f87171;          /* red-400 */
+  background: linear-gradient(135deg, #fff5f5 0%, #fff 100%);
+}
+
+.divider--red {
+  height: 2px;
+  background: linear-gradient(90deg, #ef4444, transparent);
+  border: none;
+}
+
+/* ── Roadmap step — accused variant ─────────────────────── */
+
+/* Left border turns red */
+.roadmap-step--accused .roadmap-step__body,
+.roadmap-step__body--accused {
+  border-left: 4px solid #ef4444;       /* red-500 */
+}
+
+/* Number circle turns red */
+.roadmap-step__num--accused {
+  background-color: #ef4444 !important; /* red-500 */
+  color: #fff !important;
+  border-color: #ef4444 !important;
+}
+
+/* ── badge--red (may already exist; safe to re-declare) ─── */
+.badge--red {
+  background-color: #fee2e2;            /* red-100 */
+  color: #b91c1c;                       /* red-700 */
+  border: 1px solid #fca5a5;           /* red-300 */
+}

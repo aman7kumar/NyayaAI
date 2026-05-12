@@ -6,12 +6,13 @@ Generates personalized legal roadmaps for BOTH victims AND accused persons.
 from __future__ import annotations
 import copy
 import logging
+import re
 from typing import Any
 
 logger = logging.getLogger(__name__)
 
 
-# ── VICTIM Roadmap Templates (existing) ───────────────────────────────────────
+# ── VICTIM Roadmap Templates ───────────────────────────────────────────────────
 
 VICTIM_ROADMAPS: dict[str, list[dict]] = {
 
@@ -202,7 +203,7 @@ VICTIM_ROADMAPS: dict[str, list[dict]] = {
 }
 
 
-# ── ACCUSED Roadmap Templates (NEW) ───────────────────────────────────────────
+# ── ACCUSED Roadmap Templates ──────────────────────────────────────────────────
 
 ACCUSED_ROADMAPS: dict[str, list[dict]] = {
 
@@ -423,7 +424,7 @@ ACCUSED_ROADMAPS: dict[str, list[dict]] = {
 }
 
 
-# ── Pros/Cons Awareness (NEW) ─────────────────────────────────────────────────
+# ── Pros/Cons Awareness ────────────────────────────────────────────────────────
 
 ACCUSED_PROS_CONS = {
     "cooperation": {
@@ -515,7 +516,7 @@ class RoadmapEngine:
         query_type:   str,
         entities:     dict,
         ipc_sections: list[dict],
-        user_role:    str = "victim",   # "victim" or "accused"
+        user_role:    str = "victim",
     ) -> list[dict]:
         """
         Generate roadmap based on user role.
@@ -531,21 +532,19 @@ class RoadmapEngine:
 
     def _victim_roadmap(
         self,
-        query:         str,
-        query_type:    str,
+        query:          str,
+        query_type:     str,
         predicted_keys: list[str],
     ) -> list[dict]:
         """Standard victim roadmap."""
         template_key = query_type.lower()
 
-        # Special cases
         if "IPC_498A" in predicted_keys:
             template_key = "dowry_harassment"
 
         template = VICTIM_ROADMAPS.get(template_key, VICTIM_ROADMAPS["criminal"])
         steps    = copy.deepcopy(template)
 
-        # Inject predicted sections into relevant steps
         if ipc_sections := [s for s in predicted_keys if s]:
             section_str = ", ".join(
                 s.replace("_", " ").replace("IPC ", "IPC ").replace("CrPC ", "CrPC ")
@@ -560,15 +559,11 @@ class RoadmapEngine:
 
     def _accused_roadmap(
         self,
-        query:         str,
-        query_type:    str,
+        query:          str,
+        query_type:     str,
         predicted_keys: list[str],
     ) -> list[dict]:
-        """
-        Defence roadmap for accused persons.
-        Includes legal rights, bail strategy, pros/cons awareness.
-        """
-        # Choose best template
+        """Defence roadmap for accused persons."""
         if any(k in predicted_keys for k in ["IPC_379", "IPC_380", "IPC_392", "IPC_395"]):
             template_key = "theft_accused"
         elif query_type in ("civil",):
@@ -578,7 +573,6 @@ class RoadmapEngine:
 
         steps = copy.deepcopy(ACCUSED_ROADMAPS.get(template_key, ACCUSED_ROADMAPS["criminal_accused"]))
 
-        # Add pros/cons awareness step
         steps.append({
             "step_number": len(steps) + 1,
             "action": "Understand the pros and cons of each decision you make in this case.",
@@ -600,31 +594,153 @@ class RoadmapEngine:
             lines.append("  Cons: " + "; ".join(data["cons"]))
         return "\n".join(lines)
 
+    # ──────────────────────────────────────────────────────────────────────────
+    # detect_user_role
+    # ──────────────────────────────────────────────────────────────────────────
     def detect_user_role(self, query: str) -> str:
-        """Detect if user is victim or accused from query text."""
+        """
+        Detect whether the narrator is the victim or the accused.
+
+        Strategy (highest priority first):
+        1. Hard accused-posture regex  → weight 5 each  (legal reality: FIR/case against me)
+        2. Hard victim-posture regex   → weight 5 each  (I filed FIR / I am victim)
+        3. Keyword accused signals     → weight 2 each
+        4. Keyword victim signals      → weight 2 each
+        5. Innocence cues ONLY reduce
+           keyword-level accused score, never posture score.
+
+        Returns "accused" or "victim".
+        """
         text = query.lower()
 
-        accused_signals = [
-            "i stole", "i took", "i hit", "i beat", "i killed", "i attacked",
-            "i threatened", "i cheated", "i did", "i committed", "i was caught",
-            "police caught me", "arrested me", "i ran away", "i fled",
-            "i am accused", "i am arrested", "case against me", "fir against me",
-            "complaint against me", "i broke into", "i snatched", "i robbed",
-            "i assaulted", "i molested", "i blackmailed", "i forged",
-            "i embezzled", "we stole", "we beat", "we attacked",
-            "mujh par case", "mere khilaf fir", "maine mara", "maine churaya",
+        # ── 1. Hard posture patterns ────────────────────────────────────────
+        # These override everything — they directly state the narrator's legal
+        # position regardless of guilt or innocence.
+
+        ACCUSED_POSTURE_PATTERNS = [
+            # FIR / case / complaint ON or AGAINST me
+            r"\b(fir|case|complaint|charge|charges)\s[\w\s,]{0,30}(against|on)\s[\w\s]{0,10}me\b",
+            r"\b(filed|registered|lodged|put)\s[\w\s]{0,20}(fir|case|complaint)\s[\w\s]{0,20}(against|on)\s[\w\s]{0,10}me\b",
+            # false / fake case against me
+            r"\b(false|fake|fabricated|wrong|झूठा|झूठी)\s[\w\s]{0,12}(fir|case|complaint|maamla)\b",
+            # bail / anticipatory bail
+            r"\b(anticipatory\s+bail|regular\s+bail|bail\s+application|apply\s+for\s+bail|need\s+bail|get\s+bail)\b",
+            # summoned / arrested / accused / respondent
+            r"\b(summons\s+received|i\s+am\s+accused|i\s+am\s+arrested|arrested\s+me|police\s+arrested|i\s+was\s+arrested|i\s+have\s+been\s+arrested)\b",
+            r"\b(respondent|accused\s+person|the\s+accused)\b",
+            # Hindi posture signals
+            r"\b(mere\s+khilaf|mujh\s+par\s+case|mujhpe\s+case|mujhe\s+pakda|police\s+ne\s+pakda)\b",
+            # ADD this entry to ACCUSED_POSTURE_PATTERNS list:
+            r"\b(i|we)\s+(manipulated|diverted|embezzled|misappropriated|falsified|altered|forged|"
+            r"deleted|siphoned|laundered|bribed|defrauded|created\s+fake|transferred\s+money|"
+            r"opened\s+fake|made\s+fake)\b",
+            # ADD this — catches first-person past-tense financial crime narratives
+            r"\b(i|we)\s+[\w\s]{0,20}(manipulated|diverted|embezzled|falsified|"
+            r"misappropriated|siphoned|laundered|defrauded)\b",
+
+            # ADD this — catches "the fraud remained", "the scheme", self-authored crime story
+            r"\b(the\s+fraud|the\s+scheme|my\s+scheme|my\s+fraud)\b",
+
+            # ADD this — audit discovery framing (narrator is the one caught)
+            r"\b(audit|auditors?)\s+[\w\s]{0,30}(discovered|identified|found)\b",
+            # ── NEW: physical harm / accident caused by narrator ─────────────────────
+            # Hit-and-run, drunk driving, vehicular assault
+            r"\bstruck\s+[\w\s]{0,15}(person|rider|pedestrian|cyclist|man|woman|child|victim|someone|delivery)\b",
+            r"\b(i|we)\s+[\w\s]{0,15}(drove\s+away|ran\s+away|fled\s+the\s+scene|left\s+the\s+scene|escaped\s+from|fled\s+from)\b",
+            r"\b(i\s+feared\s+arrest|fear(ed)?\s+of\s+arrest|to\s+avoid\s+arrest|fearing\s+arrest)\b",
+            r"\b(despite\s+being\s+intoxicated|drunk(en)?\s+driv(ing|e)|driving\s+(after|while|under)\s+(drinking|intoxicated|drunk|influence))\b",
+            r"\b(hit\s+and\s+run|drove\s+away\s+from\s+the\s+scene|immediately\s+drove\s+away|left\s+the\s+injured|without\s+helping)\b",
+            r"\b(i\s+lost\s+control|i\s+was\s+speeding|while\s+speeding)\b",
+            r"\b(cctv|camera).{0,60}(my\s+(vehicle|car|bike)|vehicle\s+number|my\s+number)\b",
+            r"\bi\s+panicked.{0,40}(drove|fled|ran|left)\b",
         ]
-        victim_signals = [
+
+        VICTIM_POSTURE_PATTERNS = [
+            # I filed / I lodged FIR
+            r"\b(i|we)\s[\w\s]{0,10}(filed|lodged|registered|reported)\s[\w\s]{0,20}(fir|complaint|case)\b",
+            # FIR / complaint against him/her/them
+            r"\b(fir|complaint|case)\s[\w\s]{0,20}(against|on)\s[\w\s]{0,10}(him|her|them|accused)\b",
+            # explicit victim declaration
+            r"\b(i\s+am\s+(?:a\s+)?victim|i\s+was\s+(?:the\s+)?victim|i\s+am\s+(?:a\s+)?survivor)\b",
+            # "he/she/they attacked/threatened/assaulted/harassed me"
+            r"\b(he|she|they|manager|boss|neighbour|husband|wife|partner)\b.{0,50}\b(attacked|threatened|assaulted|harassed|abused|beat|beaten|raped|molested|cheated|robbed|snatched|stole\s+from)\b.{0,30}\bme\b",
+        ]
+
+        accused_posture_score = 0
+        for pat in ACCUSED_POSTURE_PATTERNS:
+            if re.search(pat, text):
+                accused_posture_score += 5
+
+        victim_posture_score = 0
+        for pat in VICTIM_POSTURE_PATTERNS:
+            if re.search(pat, text):
+                victim_posture_score += 5
+
+        # ── 2. Keyword signals ──────────────────────────────────────────────
+        ACCUSED_KEYWORDS = [
+            # Original entries
+            "i stole", "i took", "i hit", "i beat", "i killed", "i attacked",
+            "i threatened", "i cheated", "i committed", "i was caught",
+            "i ran away", "i fled", "i broke into", "i snatched", "i robbed",
+            "i assaulted", "i molested", "i raped", "i blackmailed",
+            "i forged", "i embezzled", "we stole", "we beat", "we attacked",
+            "maine mara", "maine churaya", "mujhe arrest",
+            # Financial fraud / white-collar
+            "i manipulated", "i diverted", "i altered", "i deleted",
+            "i transferred", "i created fake", "i falsified", "i siphoned",
+            "i misappropriated", "i laundered", "i defrauded", "i bribed",
+            "i opened fake", "i made fake", "i concealed", "i destroyed",
+            "we manipulated", "we diverted", "we falsified",
+            # Admission of scheme
+            "the scheme", "my scheme", "the fraud", "my fraud",
+            "fake vendor", "fake accounts", "fake invoices",
+            "i began facing", "encouraged by the success",
+            # Past-tense self-reporting
+            "i had stolen", "i had taken", "i had hit", "i had manipulated",
+            "i had diverted", "i had embezzled", "i had cheated",
+            # Hit-and-run / vehicular
+            "i struck", "i hit a", "i ran over", "i crashed into", "i lost control",
+            "i drove away", "i fled the scene", "i panicked and",
+            "despite being intoxicated", "while intoxicated",
+            "i was speeding", "while speeding",
+        ]
+
+        VICTIM_KEYWORDS = [
             "someone attacked me", "i was attacked", "i was beaten", "i was robbed",
             "my phone was stolen", "they hit me", "he hit me", "she hit me",
-            "i was cheated", "they cheated me", "i was threatened",
-            "help me", "what should i do", "i need help", "i am a victim",
+            "i was cheated", "they cheated me", "i was threatened", "threatened me",
+            "without consent", "he touched me", "sexual harassment",
+            "workplace harassment", "internal complaints committee",
+            "icc", "posh", "i reported", "i filed a complaint",
+            "i need help", "what should i do", "i am a victim",
         ]
 
-        accused_score = sum(1 for sig in accused_signals if sig in text)
-        victim_score  = sum(1 for sig in victim_signals  if sig in text)
+        # Innocence cues — only affect keyword-level accused score, not posture
+        INNOCENCE_CUES = [
+            "did not commit", "didn't commit", "falsely accused",
+            "wrongly accused", "i denied", "i am innocent", "i did nothing",
+        ]
 
-        if accused_score > 0 and accused_score >= victim_score:
+        accused_kw = sum(2 for kw in ACCUSED_KEYWORDS if kw in text)
+        victim_kw  = sum(2 for kw in VICTIM_KEYWORDS  if kw in text)
+        innocence  = sum(1 for kw in INNOCENCE_CUES   if kw in text)
+
+        # Innocence reduces keyword accused score only (not posture)
+        accused_kw = max(0, accused_kw - innocence)
+
+        # ── 3. Final tally ──────────────────────────────────────────────────
+        total_accused = accused_posture_score + accused_kw
+        total_victim  = victim_posture_score  + victim_kw
+
+        logger.debug(
+            f"Role detection — accused_posture={accused_posture_score}, "
+            f"accused_kw={accused_kw}, victim_posture={victim_posture_score}, "
+            f"victim_kw={victim_kw} → "
+            f"total_accused={total_accused}, total_victim={total_victim}"
+        )
+
+        # Tie-break: prefer victim (safer default for people seeking help)
+        if total_accused > total_victim:
             return "accused"
         return "victim"
 

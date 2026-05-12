@@ -17,6 +17,7 @@ export default function Navbar() {
   const navLinks = [
     { to: "/",        label: "Home" },
     { to: "/analyze", label: "Analyze" },
+    { to: "/case-chat", label: "Case Chat" },
   ];
 
   return (

@@ -42,66 +42,108 @@ export default function AnalyzePage() {
   });
 
   // ── OCR extraction ───────────────────────────────────────
+ /*
   const handleOCR = async () => {
+    if (!file) return;
+    setOcrLoading(true);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      const res = await axios.post(`${API_BASE}/ocr`, formData, {
+        headers: { "Content-Type": "multipart/form-data" },
+      });
+
+      // Handle response
+      const extractedText = res.data.cleaned_text || res.data.raw_text || "";
+      const engine        = res.data.engine_used || "unknown";
+      const confidence    = res.data.confidence  || 0;
+      const wordCount     = res.data.word_count  || 0;
+
+      if (!extractedText || extractedText.trim().length === 0) {
+        toast.error(
+          "No text extracted. Try a clearer image with good lighting."
+        );
+        setOcrLoading(false);
+        return;
+      }
+
+      setOcrText(extractedText);
+      setQuery(extractedText);
+
+      // Show appropriate message based on confidence
+      if (confidence < 0.5) {
+        toast(
+          `⚠️ OCR extracted text with low confidence (${(confidence * 100).toFixed(0)}%). ` +
+          `Please review and correct the text before analyzing.`,
+          { duration: 6000, style: { background: "#fff3e0", color: "#b35900" } }
+        );
+      } else {
+        toast.success(
+          `✅ OCR complete! Engine: ${engine} | ` +
+          `Confidence: ${(confidence * 100).toFixed(0)}% | ` +
+          `Words: ${wordCount}`
+        );
+      }
+    } catch (err) {
+      const msg = err.response?.data?.detail || "OCR failed. Try a clearer image.";
+      toast.error(msg);
+    } finally {
+      setOcrLoading(false);
+    }
+  };
+  */
+  // ─────────────────────────────────────────────────────────────────────────────
+// Paste this handleOCR function into your AnalyzePage.jsx,
+// replacing your existing handleOCR / handleExtractOCR function.
+//
+// What changed vs the original:
+//   1. Passes the file (not re-reading state) so byte content is fresh.
+//   2. Checks res.data.ocr_status instead of only catching HTTP errors.
+//   3. Three distinct outcomes:
+//        "extracted" → populate textarea, show word count toast
+//        "empty"     → warn but leave textarea editable (don't block user)
+//        "error"     → show error toast (same as before)
+//   4. HTTP errors are caught separately so network failures still toast.
+// ─────────────────────────────────────────────────────────────────────────────
+
+  const handleOCR = async () => {
+    // Guard: must have a file selected in the "Upload FIR Image" tab
     if (!file) {
       toast.error("Please upload an image first.");
       return;
     }
 
-    setOcrLoading(true);
+    setOcrLoading(true);   // show spinner on the Extract button
 
     const formData = new FormData();
-    formData.append("file", file);
+    formData.append("file", file);   // use the raw File object
 
     try {
       const res = await axios.post(`${API_BASE}/ocr`, formData, {
         headers: { "Content-Type": "multipart/form-data" },
+        // Generous timeout — PaddleOCR on CPU can be slow for large images
         timeout: 60_000,
       });
 
-      const {
-        raw_text       = "",
-        word_count     = 0,
-        ocr_status,          // may be absent in older backend — handled below
-        detected_language = "",
-        engine_used    = "unknown",
-        confidence     = 0,
-      } = res.data;
+      const { raw_text, word_count, ocr_status, detected_language, engine_used } = res.data;
 
-      // ── Determine outcome robustly ───────────────────────────────────────
-      // Works whether the backend returns ocr_status or not.
-      // Priority: explicit ocr_status → fallback to raw_text presence check.
-      const hasText  = raw_text && raw_text.trim().length > 0;
-      const status   = ocr_status
-        ?? (hasText ? "extracted" : "empty");   // ?? = nullish coalesce, safe for undefined
+      if (ocr_status === "extracted" && raw_text) {
+        // ── SUCCESS: text found ──────────────────────────────────────────────
+        setQuery(raw_text);   // populate the shared textarea / query state
+        toast.success(
+          `✅ Extracted ${word_count} words` +
+          (detected_language && detected_language !== "unknown"
+            ? ` (${detected_language === "hi" ? "Hindi" : detected_language === "mixed" ? "Hindi + English" : "English"})`
+            : "") +
+          ` via ${engine_used}`
+        );
 
-      if (status === "extracted" || hasText) {
-        // ── SUCCESS ──────────────────────────────────────────────────────
-        setOcrText(raw_text);
-        setQuery(raw_text);
-
-        const langLabel =
-          detected_language === "hi"    ? " (Hindi)" :
-          detected_language === "mixed" ? " (Hindi + English)" :
-          detected_language === "en"    ? " (English)" : "";
-
-        if (confidence > 0 && confidence < 0.5) {
-          toast(
-            `⚠️ Extracted ${word_count} words with low confidence (${Math.round(confidence * 100)}%).` +
-            ` Please review the text before analyzing.`,
-            { duration: 6000, style: { background: "#fff3e0", color: "#b35900" } }
-          );
-        } else {
-          toast.success(
-            `✅ Extracted ${word_count} words${langLabel} via ${engine_used}`
-          );
-        }
-
-      } else {
-        // ── SOFT FAILURE: no text found — don't block the user ───────────
+      } else if (ocr_status === "empty") {
+        // ── SOFT FAILURE: engine ran, image just has no readable text ────────
+        // Do NOT block the user. Let them type manually.
         toast(
-          "No text detected in this image. " +
-          "The image may be blurry or low-contrast. " +
+          "⚠️ No text detected in this image.\n" +
+          "The image may be too blurry, low-contrast, or contain no text.\n" +
           "You can type your query manually below.",
           {
             icon: "⚠️",
@@ -109,10 +151,15 @@ export default function AnalyzePage() {
             style: { background: "#fffbeb", color: "#92400e", border: "1px solid #f59e0b" },
           }
         );
+        // Leave query/textarea as-is so user can type manually
+
+      } else {
+        // ── PARTIAL / UNKNOWN: engine returned something but flagged an issue
+        toast.error("OCR returned an unexpected response. Please try again.");
       }
 
     } catch (err) {
-      // ── HARD FAILURE: HTTP error, timeout, network ───────────────────────
+      // ── HARD FAILURE: HTTP error (500, 503, timeout, network) ───────────────
       const serverMsg = err?.response?.data?.detail;
 
       if (err.code === "ECONNABORTED" || err.message?.includes("timeout")) {
@@ -122,17 +169,17 @@ export default function AnalyzePage() {
       } else if (err?.response?.status === 400) {
         toast.error(serverMsg || "Unsupported file type. Use JPG, PNG, or PDF.");
       } else if (err?.response?.status === 503) {
-        toast.error("OCR engine is not ready yet. Please wait and try again.");
+        toast.error("OCR engine is not ready yet. Please wait a moment and try again.");
       } else {
         toast.error(serverMsg || "OCR failed. Try a clearer, higher-resolution image.");
       }
+
     } finally {
       setOcrLoading(false);
     }
   };
-
   // ── Submit analysis ──────────────────────────────────────
-  const handleAnalyze = async () => {
+ const handleAnalyze = async () => {
     const finalQuery = (query || "").trim();
     if (!finalQuery || finalQuery.length < 10) {
       toast.error("Please describe your situation in at least a few words.");
@@ -147,6 +194,7 @@ export default function AnalyzePage() {
         include_explanation: true,
         include_roadmap: true,
       });
+      // Store result and navigate
       sessionStorage.setItem("nyayaai_result", JSON.stringify(res.data));
       navigate("/results");
     } catch (err) {
@@ -305,7 +353,7 @@ export default function AnalyzePage() {
             <div className="card card--gold sidebar-card">
               <h3>🔒 Your Privacy</h3>
               <p>
-                All analysis is performed on our local server.
+                All analysis is performed on our local server. 
                 No data is sent to OpenAI, Google, or any external service.
               </p>
             </div>
@@ -322,10 +370,10 @@ export default function AnalyzePage() {
               <h3>📞 Emergency Contacts</h3>
               <ul className="contact-list">
                 {[
-                  { num: "112",          label: "National Emergency" },
-                  { num: "181",          label: "Women Helpline" },
-                  { num: "1930",         label: "Cyber Crime" },
-                  { num: "15100",        label: "Legal Aid (NALSA)" },
+                  { num: "112",        label: "National Emergency" },
+                  { num: "181",        label: "Women Helpline" },
+                  { num: "1930",       label: "Cyber Crime" },
+                  { num: "15100",      label: "Legal Aid (NALSA)" },
                   { num: "1800-11-4000", label: "Consumer Helpline" },
                 ].map((c) => (
                   <li key={c.num} className="contact-item">

@@ -9,6 +9,7 @@ On college GPU:   python train_classifier.py  [actual training]
 import json
 import logging
 import os
+import shutil
 import sys
 from pathlib import Path
 
@@ -25,7 +26,6 @@ from tqdm import tqdm
 from transformers import AutoTokenizer, AutoModel, get_linear_schedule_with_warmup
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
-from backend.models.ipc_classifier import NUM_LABELS, LABEL_LIST, LABEL2IDX
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s  %(message)s")
 logger = logging.getLogger(__name__)
@@ -34,6 +34,7 @@ logger = logging.getLogger(__name__)
 DEFAULT_CONFIG = {
     "base_model":    "law-ai/InLegalBERT",
     "train_file":    "backend/data/classifier_train.jsonl",
+    "label_map":     "training/data_prep/raw/label_map_v5.json",
     "output_dir":    "backend/models/saved/ipc_classifier",
     "max_len":       128,
     "batch_size":    8,        # 8 for CPU/low RAM, 32 for A100 GPU
@@ -42,9 +43,37 @@ DEFAULT_CONFIG = {
     "warmup_ratio":  0.1,
     "weight_decay":  0.01,
     "threshold":     0.25,
+    "label_smoothing": 0.1,
     "seed":          42,
     "num_workers":   0,        # 0 for Windows, 4 for Linux GPU server
 }
+
+
+def load_label_map(config: dict) -> tuple[list[str], dict[str, int]]:
+    """Load label list and indices from configured label map."""
+    label_map_path = config.get("label_map", "")
+    search_paths = [
+        Path(label_map_path) if label_map_path else None,
+        Path("training/data_prep/raw/label_map_v5.json"),
+        Path("backend/models/label_map_v5.json"),
+    ]
+    for path in search_paths:
+        if path and path.exists():
+            with open(path, encoding="utf-8") as f:
+                data = json.load(f)
+            if "labels" in data and isinstance(data["labels"], list):
+                labels = [str(label) for label in data["labels"]]
+            elif "label2id" in data and isinstance(data["label2id"], dict):
+                pairs = sorted(data["label2id"].items(), key=lambda item: int(item[1]))
+                labels = [str(label) for label, _ in pairs]
+            else:
+                labels = list(data.keys())
+            logger.info("Label map loaded: %s (%s labels)", path, len(labels))
+            return labels, {label: i for i, label in enumerate(labels)}
+
+    from backend.models.ipc_classifier import LABEL_LIST, LABEL2IDX
+    logger.warning("Label map file not found. Falling back to ipc_classifier labels.")
+    return LABEL_LIST, LABEL2IDX
 
 
 # ── Model Definition ───────────────────────────────────────────────────────────
@@ -179,12 +208,35 @@ def train(config: dict):
         logger.error("Then: python training/scripts/prepare_dataset.py")
         sys.exit(1)
 
+    LABEL_LIST, LABEL2IDX = load_label_map(config)
+    NUM_LABELS = len(LABEL_LIST)
+    logger.info("Training with %s labels", NUM_LABELS)
+
     samples = []
     with open(train_file, encoding="utf-8") as f:
         for line in f:
             line = line.strip()
-            if line:
-                samples.append(json.loads(line))
+            if not line:
+                continue
+            item = json.loads(line)
+            if "labels" in item:
+                labels = item["labels"]
+                if len(labels) != NUM_LABELS:
+                    if len(labels) < NUM_LABELS:
+                        labels = labels + [0] * (NUM_LABELS - len(labels))
+                    else:
+                        labels = labels[:NUM_LABELS]
+                item["labels"] = labels
+            elif "ipc_sections" in item:
+                labels = [0] * NUM_LABELS
+                for sec in str(item["ipc_sections"]).split(","):
+                    sec = sec.strip()
+                    if sec in LABEL2IDX:
+                        labels[LABEL2IDX[sec]] = 1
+                item["labels"] = labels
+            else:
+                continue
+            samples.append(item)
 
     if len(samples) < 100:
         logger.error(f"Too few samples: {len(samples)}. Need at least 100.")
@@ -194,10 +246,18 @@ def train(config: dict):
     logger.info(f"Total samples: {len(samples)}")
     np.random.shuffle(samples)
 
-    split         = int(len(samples) * 0.85)
-    train_samples = samples[:split]
-    val_samples   = samples[split:]
-    logger.info(f"Train: {len(train_samples)} | Val: {len(val_samples)}")
+    n = len(samples)
+    train_end = int(n * 0.80)
+    val_end = int(n * 0.90)
+    train_samples = samples[:train_end]
+    val_samples = samples[train_end:val_end]
+    test_samples = samples[val_end:]
+    logger.info(
+        "Train: %s | Val: %s | Test: %s",
+        len(train_samples),
+        len(val_samples),
+        len(test_samples),
+    )
 
     # ── Tokenizer ──────────────────────────────────────────────────────────
     logger.info(f"Loading tokenizer: {config['base_model']}")
@@ -246,7 +306,21 @@ def train(config: dict):
     scheduler    = get_linear_schedule_with_warmup(
         optimizer, warmup_steps, total_steps
     )
-    criterion    = nn.BCEWithLogitsLoss()
+    label_smoothing = float(config.get("label_smoothing", 0.1))
+    if label_smoothing > 0:
+        class SmoothBCELoss(nn.Module):
+            def __init__(self, smoothing: float = 0.1):
+                super().__init__()
+                self.smoothing = smoothing
+
+            def forward(self, logits: torch.Tensor, targets: torch.Tensor) -> torch.Tensor:
+                smooth_targets = targets * (1 - self.smoothing) + self.smoothing * 0.5
+                return nn.functional.binary_cross_entropy_with_logits(logits, smooth_targets)
+
+        criterion = SmoothBCELoss(smoothing=label_smoothing)
+        logger.info("Using label smoothing: %s", label_smoothing)
+    else:
+        criterion = nn.BCEWithLogitsLoss()
 
     # ── Output directory ───────────────────────────────────────────────────
     output_dir = Path(config["output_dir"])
@@ -344,6 +418,11 @@ def train(config: dict):
             torch.save(model.state_dict(), output_dir / "pytorch_model.bin")
             tokenizer.save_pretrained(str(output_dir))
 
+            label_map_src = Path(config.get("label_map", "training/data_prep/raw/label_map_v5.json"))
+            label_map_dst = output_dir / "label_map_v5.json"
+            if label_map_src.exists():
+                shutil.copy(label_map_src, label_map_dst)
+
             # Save config so backend knows which model to load
             with open(output_dir / "classifier_config.json", "w") as f:
                 json.dump({
@@ -353,6 +432,7 @@ def train(config: dict):
                     "label_list":  LABEL_LIST,
                     "threshold":   config["threshold"],
                     "max_len":     config["max_len"],
+                    "label_map_file": "label_map_v5.json",
                 }, f, indent=2)
 
             logger.info(f"  💾 Best model saved! Micro F1 = {best_f1:.4f}")
